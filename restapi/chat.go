@@ -30,6 +30,7 @@ type PromptRequest struct {
 	ContextName  string `json:"contextName"`
 	PatternName  string `json:"patternName"`
 	StrategyName string `json:"strategyName"` // Optional strategy name
+	ObsidianFile string `json:"obsidianFile"` // Optional obsidian markdown file name
 }
 
 type ChatRequest struct {
@@ -83,8 +84,8 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 			log.Printf("Client disconnected")
 			return
 		default:
-			log.Printf("Processing prompt %d: Model=%s Pattern=%s Context=%s",
-				i+1, prompt.Model, prompt.PatternName, prompt.ContextName)
+			log.Printf("Processing prompt %d: Model=%s Pattern=%s Context=%s ObsidianFile=%s",
+				i+1, prompt.Model, prompt.PatternName, prompt.ContextName, prompt.ObsidianFile)
 
 			streamChan := make(chan string)
 
@@ -101,6 +102,31 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 						}
 						if err := json.Unmarshal(data, &s); err == nil && s.Prompt != "" {
 							p.UserInput = s.Prompt + "\n" + p.UserInput
+						}
+					}
+				}
+
+				// Handle obsidian file - both for reading content and saving response
+				var obsidianFilePath string
+				if p.ObsidianFile != "" {
+					obsidianVaultPath := os.Getenv("OBSIDIAN_VAULT_PATH")
+					if obsidianVaultPath == "" {
+						obsidianVaultPath = filepath.Join(os.Getenv("HOME"), "Documents/Obsidian")
+					}
+					obsidianFilePath = filepath.Join(obsidianVaultPath, p.ObsidianFile)
+					if !strings.HasSuffix(obsidianFilePath, ".md") {
+						obsidianFilePath += ".md"
+					}
+
+					// Check if file exists and read its content to add to the prompt
+					if _, err := os.Stat(obsidianFilePath); err == nil {
+						fileContent, err := ioutil.ReadFile(obsidianFilePath)
+						if err == nil {
+							// Append file content to user prompt
+							p.UserInput = p.UserInput + ":" + string(fileContent)
+							log.Printf("Added content from obsidian file: %s", obsidianFilePath)
+						} else {
+							log.Printf("Error reading obsidian file %s: %v", obsidianFilePath, err)
 						}
 					}
 				}
@@ -146,7 +172,23 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 
 				lastMsg := session.GetLastMessage()
 				if lastMsg != nil {
-					streamChan <- lastMsg.Content
+					content := lastMsg.Content
+					streamChan <- content
+
+					// Save to obsidian file if specified
+					if obsidianFilePath != "" {
+						// Create directory if it doesn't exist
+						dir := filepath.Dir(obsidianFilePath)
+						if err := os.MkdirAll(dir, 0755); err != nil {
+							log.Printf("Error creating directory for obsidian file: %v", err)
+						} else {
+							if err := ioutil.WriteFile(obsidianFilePath, []byte(content), 0644); err != nil {
+								log.Printf("Error writing to obsidian file %s: %v", obsidianFilePath, err)
+							} else {
+								log.Printf("Successfully saved response to %s", obsidianFilePath)
+							}
+						}
+					}
 				} else {
 					log.Printf("No message content in session")
 					streamChan <- "Error: No response content"

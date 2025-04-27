@@ -1,0 +1,23 @@
+```bash
+curl -X POST http://localhost:8080/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompts": [
+      {
+        "userInput": "Add a joke at the end",
+        "vendor": "openai",
+        "model": "gpt-4",
+        "contextName": "general_context.md",
+        "patternName": "general",
+        "strategyName": "",
+        "obsidianFile": "test2.md"
+      }
+    ],
+    "language": "en",
+    "temperature": 0.7,
+    "topP": 1.0,
+    "frequencyPenalty": 0.0,
+    "presencePenalty": 0.0
+  }'
+
+```
