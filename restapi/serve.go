@@ -2,17 +2,20 @@ package restapi
 
 import (
 	"log/slog"
+	"net/http"
 
 	"github.com/danielmiessler/fabric/core"
 	"github.com/gin-gonic/gin"
 )
 
+// Serve starts the REST API server with all handlers, including Obsidian endpoints
 func Serve(registry *core.PluginRegistry, address string, apiKey string) (err error) {
 	r := gin.New()
 
 	// Middleware
 	r.Use(gin.Logger())
 	r.Use(gin.Recovery())
+	r.Use(CORSMiddleware())
 
 	if apiKey != "" {
 		r.Use(APIKeyMiddleware(apiKey))
@@ -29,6 +32,7 @@ func Serve(registry *core.PluginRegistry, address string, apiKey string) (err er
 	NewConfigHandler(r, fabricDb)
 	NewModelsHandler(r, registry.VendorManager)
 	NewStrategiesHandler(r)
+	NewObsidianHandler(r)
 
 	// Start server
 	err = r.Run(address)
@@ -37,4 +41,21 @@ func Serve(registry *core.PluginRegistry, address string, apiKey string) (err er
 	}
 
 	return
+}
+
+// CORSMiddleware allows all origins to avoid CORS errors
+func CORSMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-API-Key")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
+
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+
+		c.Next()
+	}
 }

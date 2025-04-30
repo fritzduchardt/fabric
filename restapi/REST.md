@@ -10,7 +10,7 @@ curl -X POST http://localhost:8080/chat \
         "contextName": "general_context.md",
         "patternName": "general",
         "strategyName": "",
-        "obsidianFile": "test2.md"
+        "obsidianFile": "test.md"
       }
     ],
     "language": "en",
@@ -20,4 +20,20 @@ curl -X POST http://localhost:8080/chat \
     "presencePenalty": 0.0
   }'
 
+```
+
+```bash
+curl http://localhost:8080/patterns/names
+```
+
+```bash
+curl http://localhost:8080/obsidian/files
+```
+
+```bash
+curl http://localhost:8080/vendors/names
+```
+
+```bash
+curl http://localhost:8080/models/names
 ```

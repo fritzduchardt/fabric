@@ -36,7 +36,7 @@ type PromptRequest struct {
 type ChatRequest struct {
 	Prompts            []PromptRequest `json:"prompts"`
 	Language           string          `json:"language"` // Add Language field to bind from request
-	common.ChatOptions                 // Embed the ChatOptions from common package
+	common.ChatOptions                                   // Embed the ChatOptions from common package
 }
 
 type StreamResponse struct {
@@ -73,7 +73,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 	c.Writer.Header().Set("Content-Type", "text/readystream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
 	c.Writer.Header().Set("Connection", "keep-alive")
-	c.Writer.Header().Set("Access-Control-Allow-Origin", "http://localhost:5173")
+	c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 	c.Writer.Header().Set("X-Accel-Buffering", "no")
 
 	clientGone := c.Writer.CloseNotify()
@@ -122,8 +122,11 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 					if _, err := os.Stat(obsidianFilePath); err == nil {
 						fileContent, err := ioutil.ReadFile(obsidianFilePath)
 						if err == nil {
+							// Escape newlines in file content to ensure JSON compatibility
+							escapedContent := strings.ReplaceAll(string(fileContent), "\n", "\\n")
+
 							// Append file content to user prompt
-							p.UserInput = p.UserInput + ":" + string(fileContent)
+							p.UserInput = p.UserInput + ":" + escapedContent
 							log.Printf("Added content from obsidian file: %s", obsidianFilePath)
 						} else {
 							log.Printf("Error reading obsidian file %s: %v", obsidianFilePath, err)
@@ -176,7 +179,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 					streamChan <- content
 
 					// Save to obsidian file if specified
-					if obsidianFilePath != "" {
+					if obsidianFilePath != "" && prompt.PatternName == "obsidian_author" {
 						// Create directory if it doesn't exist
 						dir := filepath.Dir(obsidianFilePath)
 						if err := os.MkdirAll(dir, 0755); err != nil {
@@ -208,10 +211,11 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 							Content: content,
 						}
 					} else {
+						// Unescape newlines for format detection
 						response = StreamResponse{
 							Type:    "content",
-							Format:  detectFormat(content),
-							Content: content,
+							Format:  content,
+							Content: content, // Keep content with escaped newlines
 						}
 					}
 					if err := writeSSEResponse(c.Writer, response); err != nil {
