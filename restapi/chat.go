@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
+	strings "strings"
 
 	goopenai "github.com/sashabaranov/go-openai"
 
@@ -36,7 +36,7 @@ type PromptRequest struct {
 type ChatRequest struct {
 	Prompts            []PromptRequest `json:"prompts"`
 	Language           string          `json:"language"` // Add Language field to bind from request
-	common.ChatOptions                                   // Embed the ChatOptions from common package
+	common.ChatOptions                 // Embed the ChatOptions from common package
 }
 
 type StreamResponse struct {

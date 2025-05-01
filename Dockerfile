@@ -22,20 +22,12 @@ FROM alpine:latest
 # Copy the binary from builder
 COPY --from=builder /app/fabric /fabric
 
-# Copy patterns directory
-COPY patterns /patterns
-
 # Ensure clean config directory and copy ENV file
-RUN rm -rf /root/.config/fabric && \
-    mkdir -p /root/.config/fabric
-COPY ENV /root/.config/fabric/.env
-
-# Add debug commands
-RUN ls -la /root/.config/fabric/
+RUN mkdir -p /root/.config/fabric
 
 # Expose port 8080
 EXPOSE 8080
 
 # Run the binary with debug output
 ENTRYPOINT ["/fabric"]
-CMD ["--serve"] 
+CMD ["--serve"]
