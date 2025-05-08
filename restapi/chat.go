@@ -8,7 +8,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	strings "strings"
+	"strings"
+	"time"
 
 	goopenai "github.com/sashabaranov/go-openai"
 
@@ -36,7 +37,7 @@ type PromptRequest struct {
 type ChatRequest struct {
 	Prompts            []PromptRequest `json:"prompts"`
 	Language           string          `json:"language"` // Add Language field to bind from request
-	common.ChatOptions                 // Embed the ChatOptions from common package
+	common.ChatOptions                                   // Embed the ChatOptions from common package
 }
 
 type StreamResponse struct {
@@ -64,6 +65,26 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 		c.Writer.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid request format: %v", err)})
 		return
+	}
+
+	// Write a markdown file in FABRIC_CONFIG_HOME/context with the current date and time
+	fabricHome := os.Getenv("FABRIC_CONFIG_HOME")
+	if fabricHome == "" {
+		log.Printf("FABRIC_CONFIG_HOME not set, skipping context file write")
+	} else {
+		contextDir := filepath.Join(fabricHome, "contexts")
+		if err := os.MkdirAll(contextDir, 0755); err != nil {
+			log.Printf("Error creating context directory %s: %v", contextDir, err)
+		} else {
+			now := time.Now()
+			filename := filepath.Join(contextDir, "general_context.md")
+			content := fmt.Sprintf("# CONTEXT\n - The current date and time is: %s\n", now.Format("2006-01-02 15:04:05"))
+			if err := ioutil.WriteFile(filename, []byte(content), 0644); err != nil {
+				log.Printf("Error writing context file %s: %v", filename, err)
+			} else {
+				log.Printf("Wrote context file: %s", filename)
+			}
+		}
 	}
 
 	// Add log to check received language field

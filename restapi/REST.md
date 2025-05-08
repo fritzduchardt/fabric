@@ -1,5 +1,5 @@
 ```bash
-curl -X POST http://localhost:8080/chat \
+curl -X POST http://localhost:8085/chat \
   -H "Content-Type: application/json" \
   -d '{
     "prompts": [
