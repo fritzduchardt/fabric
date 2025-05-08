@@ -2,6 +2,7 @@ package restapi
 
 import (
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -20,6 +21,7 @@ func NewObsidianHandler(r *gin.Engine) {
 	vaultPath := os.Getenv("OBSIDIAN_VAULT_PATH")
 	if vaultPath == "" {
 		vaultPath = filepath.Join(os.Getenv("HOME"), "Documents/Obsidian")
+		log.Printf("Obsidian Vault Path not set. Defaulting to: %s", vaultPath)
 	}
 	handler := &ObsidianHandler{vaultPath: vaultPath}
 	// List all markdown files under the vault
