@@ -16,14 +16,17 @@ COPY . .
 # Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -o fabric
 
-# Use scratch as final base image
+# Use alpine as final base image
 FROM alpine:latest
 
 # Copy the binary from builder
 COPY --from=builder /app/fabric /fabric
 
-# Ensure clean config directory and copy ENV file
-RUN mkdir -p /root/.config/fabric
+# Ensure clean config directories
+RUN mkdir -p /home/root/.config/fabric/patterns
+
+# Copy local patterns into container patterns directory
+COPY patterns/. /home/root/.config/fabric/patterns
 
 # Expose port 8080
 EXPOSE 8080
