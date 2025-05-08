@@ -133,6 +133,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 					obsidianVaultPath := os.Getenv("OBSIDIAN_VAULT_PATH")
 					if obsidianVaultPath == "" {
 						obsidianVaultPath = filepath.Join(os.Getenv("HOME"), "Documents/Obsidian")
+						log.Printf("Obsidian Vault Path not set. Defaulting to: %s", obsidianVaultPath)
 					}
 					obsidianFilePath = filepath.Join(obsidianVaultPath, p.ObsidianFile)
 					if !strings.HasSuffix(obsidianFilePath, ".md") {
