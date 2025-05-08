@@ -1,4 +1,3 @@
-
 version: '3.8'
 
 services:
@@ -7,6 +6,6 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./ENV:/home/fabric/.config/fabric/.env:ro
+      - ./ENV:/root/.config/fabric/.env:ro
     environment:
-      - GIN_MODE=release
+      - GIN_MODE=release 
