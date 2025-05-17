@@ -32,6 +32,7 @@ type PromptRequest struct {
 	PatternName  string `json:"patternName"`
 	StrategyName string `json:"strategyName"`
 	ObsidianFile string `json:"obsidianFile"`
+	SessionName  string `json:"sessionName"`
 }
 
 type ChatRequest struct {
@@ -158,6 +159,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 					PatternName: p.PatternName,
 					ContextName: p.ContextName,
 					Language:    request.Language,
+					SessionName: p.SessionName,
 				}
 
 				opts := &common.ChatOptions{

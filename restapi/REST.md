@@ -14,12 +14,12 @@ curl -X POST http://localhost:8085/chat \
       }
     ],
     "language": "en",
+    "sessionName": "mySession",
     "temperature": 0.7,
     "topP": 1.0,
     "frequencyPenalty": 0.0,
     "presencePenalty": 0.0
   }'
-
 ```
 
 ```bash
