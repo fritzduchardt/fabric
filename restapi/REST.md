@@ -25,6 +25,9 @@ curl -X POST http://localhost:8085/chat \
 ```bash
 curl http://localhost:8080/patterns/names
 ```
+```bash
+curl -v -X POST http://localhost:8080/patterns/generate
+```
 
 ```bash
 curl http://localhost:8080/obsidian/files

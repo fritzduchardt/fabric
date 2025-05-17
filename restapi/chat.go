@@ -30,20 +30,20 @@ type PromptRequest struct {
 	Model        string `json:"model"`
 	ContextName  string `json:"contextName"`
 	PatternName  string `json:"patternName"`
-	StrategyName string `json:"strategyName"` // Optional strategy name
-	ObsidianFile string `json:"obsidianFile"` // Optional obsidian markdown file name
+	StrategyName string `json:"strategyName"`
+	ObsidianFile string `json:"obsidianFile"`
 }
 
 type ChatRequest struct {
-	Prompts            []PromptRequest `json:"prompts"`
-	Language           string          `json:"language"` // Add Language field to bind from request
-	common.ChatOptions                 // Embed the ChatOptions from common package
+	Prompts  []PromptRequest `json:"prompts"`
+	Language string          `json:"language"`
+	common.ChatOptions
 }
 
 type StreamResponse struct {
-	Type    string `json:"type"`    // "content", "error", "complete"
-	Format  string `json:"format"`  // "markdown", "mermaid", "plain"
-	Content string `json:"content"` // The actual content
+	Type    string `json:"type"`
+	Format  string `json:"format"`
+	Content string `json:"content"`
 }
 
 func NewChatHandler(r *gin.Engine, registry *core.PluginRegistry, db *fsdb.Db) *ChatHandler {
@@ -51,9 +51,7 @@ func NewChatHandler(r *gin.Engine, registry *core.PluginRegistry, db *fsdb.Db) *
 		registry: registry,
 		db:       db,
 	}
-
 	r.POST("/chat", handler.HandleChat)
-
 	return handler
 }
 
@@ -67,7 +65,6 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 		return
 	}
 
-	// Write a markdown file in FABRIC_CONFIG_HOME/context with the current date and time
 	fabricHome := os.Getenv("FABRIC_CONFIG_HOME")
 	if fabricHome == "" {
 		log.Printf("FABRIC_CONFIG_HOME not set, skipping context file write")
@@ -87,10 +84,8 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 		}
 	}
 
-	// Add log to check received language field
 	log.Printf("Received chat request - Language: '%s', Prompts: %d", request.Language, len(request.Prompts))
 
-	// Set headers for SSE
 	c.Writer.Header().Set("Content-Type", "text/readystream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
 	c.Writer.Header().Set("Connection", "keep-alive")
@@ -109,11 +104,9 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 				i+1, prompt.Model, prompt.PatternName, prompt.ContextName, prompt.ObsidianFile)
 
 			streamChan := make(chan string)
-
 			go func(p PromptRequest) {
 				defer close(streamChan)
 
-				// Load and prepend strategy prompt if strategyName is set
 				if p.StrategyName != "" {
 					strategyFile := filepath.Join(os.Getenv("HOME"), ".config", "fabric", "strategies", p.StrategyName+".json")
 					data, err := ioutil.ReadFile(strategyFile)
@@ -127,7 +120,6 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 					}
 				}
 
-				// Handle obsidian file - both for reading content and saving response
 				var obsidianFilePath string
 				if p.ObsidianFile != "" {
 					obsidianVaultPath := os.Getenv("OBSIDIAN_VAULT_PATH")
@@ -139,15 +131,10 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 					if !strings.HasSuffix(obsidianFilePath, ".md") {
 						obsidianFilePath += ".md"
 					}
-
-					// Check if file exists and read its content to add to the prompt
 					if _, err := os.Stat(obsidianFilePath); err == nil {
 						fileContent, err := ioutil.ReadFile(obsidianFilePath)
 						if err == nil {
-							// Escape newlines in file content to ensure JSON compatibility
 							escapedContent := strings.ReplaceAll(string(fileContent), "\n", "\\n")
-
-							// Append file content to user prompt
 							p.UserInput = p.UserInput + ":" + escapedContent
 							log.Printf("Added content from obsidian file: %s", obsidianFilePath)
 						} else {
@@ -163,7 +150,6 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 					return
 				}
 
-				// Pass the language received in the initial request to the common.ChatRequest
 				chatReq := &common.ChatRequest{
 					Message: &goopenai.ChatCompletionMessage{
 						Role:    "user",
@@ -171,7 +157,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 					},
 					PatternName: p.PatternName,
 					ContextName: p.ContextName,
-					Language:    request.Language, // Pass the language field
+					Language:    request.Language,
 				}
 
 				opts := &common.ChatOptions{
@@ -188,7 +174,6 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 					streamChan <- fmt.Sprintf("Error: %v", err)
 					return
 				}
-
 				if session == nil {
 					log.Printf("No session returned from chatter.Send")
 					streamChan <- "Error: No response from model"
@@ -199,10 +184,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 				if lastMsg != nil {
 					content := lastMsg.Content
 					streamChan <- content
-
-					// Save to obsidian file if specified
 					if obsidianFilePath != "" && prompt.PatternName == "obsidian_author" {
-						// Create directory if it doesn't exist
 						dir := filepath.Dir(obsidianFilePath)
 						if err := os.MkdirAll(dir, 0755); err != nil {
 							log.Printf("Error creating directory for obsidian file: %v", err)
@@ -227,18 +209,9 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 				default:
 					var response StreamResponse
 					if strings.HasPrefix(content, "Error:") {
-						response = StreamResponse{
-							Type:    "error",
-							Format:  "plain",
-							Content: content,
-						}
+						response = StreamResponse{"error", "plain", content}
 					} else {
-						// Unescape newlines for format detection
-						response = StreamResponse{
-							Type:    "content",
-							Format:  content,
-							Content: content, // Keep content with escaped newlines
-						}
+						response = StreamResponse{"content", content, content}
 					}
 					if err := writeSSEResponse(c.Writer, response); err != nil {
 						log.Printf("Error writing response: %v", err)
@@ -247,11 +220,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 				}
 			}
 
-			completeResponse := StreamResponse{
-				Type:    "complete",
-				Format:  "plain",
-				Content: "",
-			}
+			completeResponse := StreamResponse{"complete", "plain", ""}
 			if err := writeSSEResponse(c.Writer, completeResponse); err != nil {
 				log.Printf("Error writing completion response: %v", err)
 				return
@@ -265,11 +234,9 @@ func writeSSEResponse(w gin.ResponseWriter, response StreamResponse) error {
 	if err != nil {
 		return fmt.Errorf("error marshaling response: %v", err)
 	}
-
 	if _, err := fmt.Fprintf(w, "data: %s\n\n", string(data)); err != nil {
 		return fmt.Errorf("error writing response: %v", err)
 	}
-
 	w.(http.Flusher).Flush()
 	return nil
 }
