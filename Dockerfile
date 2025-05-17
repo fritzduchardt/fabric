@@ -3,6 +3,9 @@ FROM golang:1.24.2-alpine AS builder
 # Set working directory
 WORKDIR /app
 
+# Install curl
+RUN apk add --no-cache curl
+
 # Copy go mod and sum files
 COPY go.mod go.sum ./
 
@@ -15,8 +18,10 @@ COPY . .
 # Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -o fabric
 
-# Install gomplate binary from hairyhenderson
-RUN go install github.com/hairyhenderson/gomplate/v3@latest
+# Download gomplate binary instead of installing via go
+ENV GOMPLATE_VERSION=v3.11.5
+RUN curl -o /usr/bin/gomplate -sSL https://github.com/hairyhenderson/gomplate/releases/download/${GOMPLATE_VERSION}/gomplate_linux-arm64
+RUN chmod +x /usr/bin/gomplate
 
 FROM alpine:latest
 
@@ -29,7 +34,7 @@ RUN mkdir -p /home/fabric/.config/fabric/patterns
 
 # Copy the fabric binary and gomplate into the final image
 COPY --from=builder /app/fabric /home/fabric/fabric
-COPY --from=builder /go/bin/gomplate /usr/local/bin/gomplate
+COPY --from=builder /usr/bin/gomplate /usr/local/bin/gomplate
 
 # Set ownership of home directory to fabric user
 RUN chown -R fabric:fabric /home/fabric
