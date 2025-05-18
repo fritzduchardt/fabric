@@ -40,3 +40,12 @@ curl http://localhost:8080/vendors/names
 ```bash
 curl http://localhost:8080/models/names
 ```
+
+```bash
+curl -X POST http://localhost:8080/storelast \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sessionName": "mySession",
+    "content": "This is the last message content to store"
+  }'
+```

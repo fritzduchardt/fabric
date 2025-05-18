@@ -1,3 +1,4 @@
+
 package restapi
 
 import (
@@ -53,6 +54,7 @@ func NewChatHandler(r *gin.Engine, registry *core.PluginRegistry, db *fsdb.Db) *
 		db:       db,
 	}
 	r.POST("/chat", handler.HandleChat)
+	r.POST("/storelast", handler.StoreLast)
 	return handler
 }
 
@@ -229,6 +231,73 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 			}
 		}
 	}
+}
+
+func (h *ChatHandler) StoreLast(c *gin.Context) {
+	var req struct {
+		SessionName string `json:"sessionName"`
+	}
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.SessionName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "sessionName is required"})
+		return
+	}
+	fabricHome := os.Getenv("FABRIC_CONFIG_HOME")
+	if fabricHome == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "FABRIC_CONFIG_HOME not set"})
+		return
+	}
+	sessionsDir := filepath.Join(fabricHome, "sessions")
+	data, err := ioutil.ReadFile(filepath.Join(sessionsDir, req.SessionName+".json"))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error reading session file: %v", err)})
+		return
+	}
+	var msgs []struct {
+		Role    string `json:"role"`
+		Content string `json:"content"`
+	}
+	if err := json.Unmarshal(data, &msgs); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error parsing session JSON: %v", err)})
+		return
+	}
+	var assistantContent string
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role == "assistant" {
+			assistantContent = msgs[i].Content
+			break
+		}
+	}
+	if assistantContent == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "no assistant message found in session"})
+		return
+	}
+	var savedFilename string
+	lines := strings.Split(assistantContent, "\n")
+	if len(lines) > 0 && strings.HasPrefix(lines[0], "FILENAME:") {
+		savedFilename = strings.TrimSpace(strings.TrimPrefix(lines[0], "FILENAME:"))
+		assistantContent = strings.Join(lines[1:], "\n")
+		dir := filepath.Dir(savedFilename)
+		if dir != "" && dir != "." {
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error creating directory: %v", err)})
+				return
+			}
+		}
+		if err := ioutil.WriteFile(savedFilename, []byte(assistantContent), 0644); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error writing file %s: %v", savedFilename, err)})
+			return
+		}
+		log.Printf("Stored assistant content to %s", savedFilename)
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"message":  "Last content stored successfully",
+		"content":  assistantContent,
+		"filename": savedFilename,
+	})
 }
 
 func writeSSEResponse(w gin.ResponseWriter, response StreamResponse) error {
