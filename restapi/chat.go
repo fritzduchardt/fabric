@@ -188,18 +188,6 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 				if lastMsg != nil {
 					content := lastMsg.Content
 					streamChan <- content
-					if obsidianFilePath != "" && prompt.PatternName == "obsidian_author" {
-						dir := filepath.Dir(obsidianFilePath)
-						if err := os.MkdirAll(dir, 0755); err != nil {
-							log.Printf("Error creating directory for obsidian file: %v", err)
-						} else {
-							if err := ioutil.WriteFile(obsidianFilePath, []byte(content), 0644); err != nil {
-								log.Printf("Error writing to obsidian file %s: %v", obsidianFilePath, err)
-							} else {
-								log.Printf("Successfully saved response to %s", obsidianFilePath)
-							}
-						}
-					}
 				} else {
 					log.Printf("No message content in session")
 					streamChan <- "Error: No response content"
