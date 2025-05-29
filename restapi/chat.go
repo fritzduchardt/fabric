@@ -288,29 +288,33 @@ func (h *ChatHandler) StoreLast(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "no assistant message found in session"})
 		return
 	}
-	var savedFilename string
-	lines := strings.Split(assistantContent, "\n")
-	if len(lines) > 0 && strings.HasPrefix(lines[0], "FILENAME:") {
-		savedFilename = strings.TrimSpace(strings.TrimPrefix(lines[0], "FILENAME:"))
-		assistantContent = strings.Join(lines[1:], "\n")
-		dir := filepath.Dir(savedFilename)
-		if dir != "" && dir != "." {
-			if err := os.MkdirAll(dir, 0755); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error creating directory: %v", err)})
+	parsed := parseFilenameBlocks(assistantContent)
+	var savedFilenames []string
+	if len(parsed) > 0 {
+		for filename, content := range parsed {
+			dir := filepath.Dir(filename)
+			if dir != "" && dir != "." {
+				if err := os.MkdirAll(dir, 0755); err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error creating directory: %v", err)})
+					return
+				}
+			}
+			if err := ioutil.WriteFile(filename, []byte(content), 0644); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error writing file %s: %v", filename, err)})
 				return
 			}
+			log.Printf("Stored assistant content to %s", filename)
+			savedFilenames = append(savedFilenames, filename)
 		}
-		if err := ioutil.WriteFile(savedFilename, []byte(assistantContent), 0644); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error writing file %s: %v", savedFilename, err)})
-			return
-		}
-		log.Printf("Stored assistant content to %s", savedFilename)
+		c.JSON(http.StatusOK, gin.H{
+			"message":   "Last content stored successfully",
+			"filenames": savedFilenames,
+		})
+	} else {
+		c.JSON(http.StatusOK, gin.H{
+			"message": "No FILENAME markers found; nothing stored",
+		})
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"message":  "Last content stored successfully",
-		"content":  assistantContent,
-		"filename": savedFilename,
-	})
 }
 
 func (h *ChatHandler) StoreMessage(c *gin.Context) {
@@ -325,30 +329,33 @@ func (h *ChatHandler) StoreMessage(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "message is required"})
 		return
 	}
-	var savedFilename string
-	content := req.Message
-	lines := strings.Split(req.Message, "\n")
-	if len(lines) > 0 && strings.HasPrefix(lines[0], "FILENAME:") {
-		savedFilename = strings.TrimSpace(strings.TrimPrefix(lines[0], "FILENAME:"))
-		content = strings.Join(lines[1:], "\n")
-		dir := filepath.Dir(savedFilename)
-		if dir != "" && dir != "." {
-			if err := os.MkdirAll(dir, 0755); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error creating directory: %v", err)})
+	parsed := parseFilenameBlocks(req.Message)
+	var savedFilenames []string
+	if len(parsed) > 0 {
+		for filename, content := range parsed {
+			dir := filepath.Dir(filename)
+			if dir != "" && dir != "." {
+				if err := os.MkdirAll(dir, 0755); err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error creating directory: %v", err)})
+					return
+				}
+			}
+			if err := ioutil.WriteFile(filename, []byte(content), 0644); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error writing file %s: %v", filename, err)})
 				return
 			}
+			log.Printf("Stored message content to %s", filename)
+			savedFilenames = append(savedFilenames, filename)
 		}
-		if err := ioutil.WriteFile(savedFilename, []byte(content), 0644); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error writing file %s: %v", savedFilename, err)})
-			return
-		}
-		log.Printf("Stored message content to %s", savedFilename)
+		c.JSON(http.StatusOK, gin.H{
+			"message":   "Content stored successfully",
+			"filenames": savedFilenames,
+		})
+	} else {
+		c.JSON(http.StatusOK, gin.H{
+			"message": "No FILENAME markers found; nothing stored",
+		})
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"message":  "Content stored successfully",
-		"content":  content,
-		"filename": savedFilename,
-	})
 }
 
 func writeSSEResponse(w gin.ResponseWriter, response StreamResponse) error {
@@ -366,6 +373,30 @@ func writeSSEResponse(w gin.ResponseWriter, response StreamResponse) error {
 func stripTags(html string) string {
 	re := regexp.MustCompile("<[^>]*>")
 	return re.ReplaceAllString(html, "")
+}
+
+func parseFilenameBlocks(input string) map[string]string {
+	blocks := make(map[string]string)
+	lines := strings.Split(input, "\n")
+	var current string
+	var buf []string
+	for _, l := range lines {
+		if strings.HasPrefix(l, "FILENAME:") {
+			if current != "" {
+				blocks[current] = strings.Join(buf, "\n")
+				buf = nil
+			}
+			current = strings.TrimSpace(strings.TrimPrefix(l, "FILENAME:"))
+		} else {
+			if current != "" {
+				buf = append(buf, l)
+			}
+		}
+	}
+	if current != "" {
+		blocks[current] = strings.Join(buf, "\n")
+	}
+	return blocks
 }
 
 func detectFormat(content string) string {
