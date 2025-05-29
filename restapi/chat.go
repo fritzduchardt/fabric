@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -146,6 +147,28 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 							log.Printf("Error reading obsidian file %s: %v", obsidianFilePath, err)
 						}
 					}
+				}
+
+				// fetch and embed web links
+				urlRegex := regexp.MustCompile(`https?://[^\s]+`)
+				links := urlRegex.FindAllString(p.UserInput, -1)
+				for _, link := range links {
+					resp, err := http.Get(link)
+					if err != nil {
+						log.Printf("Error fetching URL %s: %v", link, err)
+						continue
+					}
+					body, err := ioutil.ReadAll(resp.Body)
+					resp.Body.Close()
+					if err != nil {
+						log.Printf("Error reading response from URL %s: %v", link, err)
+						continue
+					}
+					text := stripTags(string(body))
+					content := "URL: " + link + "\n" + text
+					escaped := strings.ReplaceAll(content, "\n", "\\n")
+					p.UserInput = p.UserInput + ":" + escaped
+					log.Printf("Added content from URL: %s", link)
 				}
 
 				chatter, err := h.registry.GetChatter(p.Model, 2048, "", false, false)
@@ -338,6 +361,11 @@ func writeSSEResponse(w gin.ResponseWriter, response StreamResponse) error {
 	}
 	w.(http.Flusher).Flush()
 	return nil
+}
+
+func stripTags(html string) string {
+	re := regexp.MustCompile("<[^>]*>")
+	return re.ReplaceAllString(html, "")
 }
 
 func detectFormat(content string) string {
