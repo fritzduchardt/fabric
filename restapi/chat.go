@@ -1,4 +1,3 @@
-
 package restapi
 
 import (
@@ -319,17 +318,17 @@ func (h *ChatHandler) StoreLast(c *gin.Context) {
 
 func (h *ChatHandler) StoreMessage(c *gin.Context) {
 	var req struct {
-		Message string `json:"message"`
+		Prompt string `json:"prompt"`
 	}
 	if err := c.BindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if req.Message == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "message is required"})
+	if req.Prompt == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "prompt is required"})
 		return
 	}
-	parsed := parseFilenameBlocks(req.Message)
+	parsed := parseFilenameBlocks(req.Prompt)
 	var savedFilenames []string
 	if len(parsed) > 0 {
 		for filename, content := range parsed {
