@@ -26,8 +26,8 @@ func NewObsidianHandler(r *gin.Engine) {
 	handler := &ObsidianHandler{vaultPath: vaultPath}
 	// List all markdown files under the vault
 	r.GET("/obsidian/files", handler.List)
-	// Get the content of a specific markdown file by relative name
-	r.GET("/obsidian/file/:name", handler.Get)
+	// Get the content of a specific markdown file by relative name or path (supports subpaths)
+	r.GET("/obsidian/file/*name", handler.Get)
 }
 
 // List returns a JSON array of all .md files in the vault (relative paths)
@@ -62,12 +62,16 @@ func (h *ObsidianHandler) List(c *gin.Context) {
 
 // Get reads and returns the content of the requested .md file as text/markdown
 func (h *ObsidianHandler) Get(c *gin.Context) {
+	// c.Param("name") includes leading slash for wildcard routes
 	name := c.Param("name")
+	name = strings.TrimPrefix(name, "/")
+	// if no .md extension provided, append it
 	if !strings.HasSuffix(name, ".md") {
 		name += ".md"
 	}
+	// clean the path to prevent directory traversal
 	clean := filepath.Clean(name)
-	parts := strings.Split(clean, "/")
+	parts := strings.Split(clean, string(os.PathSeparator))
 	for _, part := range parts {
 		if strings.HasPrefix(part, ".") {
 			c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})

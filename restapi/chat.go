@@ -79,7 +79,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 		} else {
 			now := time.Now()
 			filename := filepath.Join(contextDir, "general_context.md")
-			content := fmt.Sprintf("# CONTEXT\n - The current date and time is: %s\n", now.Format("2006-01-02 15:04:05"))
+			content := fmt.Sprintf("# CONTEXT\n - My name is Fritz\n - The current date and time is: %s\n", now.Format("2006-01-02 15:04:05"))
 			if err := ioutil.WriteFile(filename, []byte(content), 0644); err != nil {
 				log.Printf("Error writing context file %s: %v", filename, err)
 			} else {
@@ -140,7 +140,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 						fileContentAmended := "FILENAME: " + string(obsidianFilePath) + "\n" + string(fileContent)
 						if err == nil {
 							escapedContent := strings.ReplaceAll(fileContentAmended, "\n", "\\n")
-							p.UserInput = p.UserInput + ":" + escapedContent
+							p.UserInput = p.UserInput + ".\n Journal File: " + escapedContent
 							log.Printf("Added content from obsidian file: %s", obsidianFilePath)
 						} else {
 							log.Printf("Error reading obsidian file %s: %v", obsidianFilePath, err)
