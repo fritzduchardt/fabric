@@ -1,4 +1,3 @@
-
 package restapi
 
 import (
@@ -78,6 +77,18 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 		if err := os.MkdirAll(contextDir, 0755); err != nil {
 			log.Printf("Error creating context directory %s: %v", contextDir, err)
 		} else {
+			// gather unique pattern names from prompts
+			var patternSet = make(map[string]bool)
+			for _, p := range request.Prompts {
+				if p.PatternName != "" {
+					patternSet[p.PatternName] = true
+				}
+			}
+			var patternNamesSlice []string
+			for name := range patternSet {
+				patternNamesSlice = append(patternNamesSlice, name)
+			}
+			patternNames := strings.Join(patternNamesSlice, ", ")
 			now := time.Now()
 			// personal name configurable via environment variable PERSONAL_NAME
 			personalName := os.Getenv("PERSONAL_NAME")
@@ -85,7 +96,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 				personalName = "Fritz"
 			}
 			filename := filepath.Join(contextDir, "general_context.md")
-			content := fmt.Sprintf("# CONTEXT\n - My name is %s\n - The current date and time is: %s\n, now.Format("2006-01-02 15:04:05"))
+			content := fmt.Sprintf("# CONTEXT\n - My name is %s\n - The current date and time is: %s\n - Pattern name(s): %s\n", personalName, now.Format("2006-01-02 15:04:05"), patternNames)
 			if err := ioutil.WriteFile(filename, []byte(content), 0644); err != nil {
 				log.Printf("Error writing context file %s: %v", filename, err)
 			} else {
@@ -116,19 +127,6 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 			streamChan := make(chan string)
 			go func(p PromptRequest) {
 				defer close(streamChan)
-
-				if p.StrategyName != "" {
-					strategyFile := filepath.Join(os.Getenv("HOME"), ".config", "fabric", "strategies", p.StrategyName+".json")
-					data, err := ioutil.ReadFile(strategyFile)
-					if err == nil {
-						var s struct {
-							Prompt string `json:"prompt"`
-						}
-						if err := json.Unmarshal(data, &s); err == nil && s.Prompt != "" {
-							p.UserInput = s.Prompt + "\n" + p.UserInput
-						}
-					}
-				}
 
 				var obsidianFilePath string
 				if p.ObsidianFile != "" {

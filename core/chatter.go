@@ -162,7 +162,7 @@ func (o *Chatter) BuildSession(request *common.ChatRequest, raw bool) (session *
 
 	var patternContent string
 	if request.PatternName != "" {
-		pattern, err := o.db.Patterns.GetApplyVariables(request.PatternName, request.PatternVariables, request.Message.Content)
+		pattern, err := o.db.Patterns.GetApplyVariables(request.PatternName, request.PatternVariables, "Specific user request: "+request.Message.Content)
 		// pattern will now contain user input, and all variables will be resolved, or errored
 
 		if err != nil {
@@ -171,7 +171,7 @@ func (o *Chatter) BuildSession(request *common.ChatRequest, raw bool) (session *
 		patternContent = pattern.Pattern
 	}
 
-	systemMessage := strings.TrimSpace(contextContent) + strings.TrimSpace(patternContent)
+	systemMessage := strings.TrimSpace(contextContent) + "\n" + strings.TrimSpace(patternContent)
 
 	// Apply strategy if specified
 	if request.StrategyName != "" {
