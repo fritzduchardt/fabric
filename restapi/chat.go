@@ -167,7 +167,8 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 						log.Printf("Error reading response from URL %s: %v", link, err)
 						continue
 					}
-					text := stripTags(string(body))
+					text := common.StripTags(string(body))
+
 					content := "URL: " + link + "\n" + text
 					escaped := strings.ReplaceAll(content, "\n", "\\n")
 					p.UserInput = p.UserInput + ":" + escaped
@@ -371,11 +372,6 @@ func writeSSEResponse(w gin.ResponseWriter, response StreamResponse) error {
 	}
 	w.(http.Flusher).Flush()
 	return nil
-}
-
-func stripTags(html string) string {
-	re := regexp.MustCompile("<[^>]*>")
-	return re.ReplaceAllString(html, "")
 }
 
 func parseFilenameBlocks(input string) map[string]string {
