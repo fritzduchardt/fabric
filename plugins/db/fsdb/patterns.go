@@ -80,8 +80,7 @@ func (o *PatternsEntity) GetApplyVariables(
 			continue
 		}
 		md := common.StripTags(string(body))
-		escaped := strings.ReplaceAll(md, "\n", "\\n")
-		pattern.Pattern = strings.ReplaceAll(pattern.Pattern, link, escaped)
+		pattern.Pattern = strings.ReplaceAll(pattern.Pattern, link, md)
 	}
 
 	return

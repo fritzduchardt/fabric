@@ -75,7 +75,8 @@ func IsSymlinkToDir(path string) bool {
 }
 
 var (
-	linkRe        = regexp.MustCompile(`(?i)<a\s+href="([^"]+)">(.*?)</a>`)
+	// Updated to match all a tags with href attribute where href is not a local link
+	linkRe        = regexp.MustCompile(`(?i)(?s)<a\s+[^>]*href="[^#](.*?)([^"]+)"[^>]*>.*?<\/a>`)
 	hRe           = regexp.MustCompile(`(?i)<h([1-6])>(.*?)</h[1-6]>`)
 	strongRe      = regexp.MustCompile(`(?i)<(?:strong|b)>(.*?)</(?:strong|b)>`)
 	emRe          = regexp.MustCompile(`(?i)<(?:em|i)>(.*?)</(?:em|i)>`)
