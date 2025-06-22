@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"strconv"
 	"strings"
 )
 
@@ -76,8 +75,8 @@ func IsSymlinkToDir(path string) bool {
 
 var (
 	// Updated to match all a tags with href attribute where href is not a local link
-	linkRe        = regexp.MustCompile(`(?i)(?s)<a\s+[^>]*href="([^#].*?)([^"]+)"[^>]*>.*?<\/a>`)
-	hRe           = regexp.MustCompile(`(?i)<h([1-6])>(.*?)</h[1-6]>`)
+	linkRe = regexp.MustCompile(`(?i)(?s)<a\s+[^>]*href="([^#].*?)"[^>]*>(.*?)<\/a>`)
+	//hRe           = regexp.MustCompile(`(?i)<h([1-6])>(.*?)</h[1-6]>`)
 	strongRe      = regexp.MustCompile(`(?i)<(?:strong|b)>(.*?)</(?:strong|b)>`)
 	emRe          = regexp.MustCompile(`(?i)<(?:em|i)>(.*?)</(?:em|i)>`)
 	liRe          = regexp.MustCompile(`(?i)<li>(.*?)</li>`)
@@ -90,13 +89,23 @@ var (
 // StripTags converts HTML to Markdown by removing HTML tags and formatting the content
 func StripTags(html string) string {
 	html = scriptStyleRe.ReplaceAllString(html, "")
-	html = hRe.ReplaceAllStringFunc(html, func(s string) string {
-		parts := hRe.FindStringSubmatch(s)
-		level, _ := strconv.Atoi(parts[1])
-		content := parts[2]
-		return strings.Repeat("#", level) + " " + content + "\n\n"
+	// does not work for faz
+	//html = hRe.ReplaceAllStringFunc(html, func(s string) string {
+	//	parts := hRe.FindStringSubmatch(s)
+	//	level, _ := strconv.Atoi(parts[1])
+	//	content := parts[2]
+	//	return strings.Repeat("#", level) + " " + content + "\n\n"
+	//})
+	html = linkRe.ReplaceAllStringFunc(html, func(s string) string {
+		parts := linkRe.FindStringSubmatch(s)
+		href := parts[1]
+		text := parts[2]
+		// replace line breaks with full stops
+		text = strings.ReplaceAll(text, "\n", ".")
+		text = strings.ReplaceAll(text, "\r", ".")
+
+		return "[" + text + "](" + href + ")"
 	})
-	html = linkRe.ReplaceAllString(html, "[$2]($1)")
 	html = strongRe.ReplaceAllString(html, "**$1**")
 	html = emRe.ReplaceAllString(html, "*$1*")
 	html = liRe.ReplaceAllString(html, "- $1\n")
