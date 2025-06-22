@@ -77,7 +77,6 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 		if err := os.MkdirAll(contextDir, 0755); err != nil {
 			log.Printf("Error creating context directory %s: %v", contextDir, err)
 		} else {
-			// gather unique pattern names from prompts
 			var patternSet = make(map[string]bool)
 			for _, p := range request.Prompts {
 				if p.PatternName != "" {
@@ -90,13 +89,12 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 			}
 			patternNames := strings.Join(patternNamesSlice, ", ")
 			now := time.Now()
-			// personal name configurable via environment variable PERSONAL_NAME
 			personalName := os.Getenv("PERSONAL_NAME")
 			if personalName == "" {
 				personalName = "Fritz"
 			}
 			filename := filepath.Join(contextDir, "general_context.md")
-			content := fmt.Sprintf("# CONTEXT\n - My name is %s\n - The current date and time is: %s\n - Pattern name(s): %s\n", personalName, now.Format("2006-01-02 15:04:05"), patternNames)
+			content := fmt.Sprintf("# CONTEXT\n - My name is %s\n - The current date and time is: %s\n - Pattern name(s): %s\n\n", personalName, now.Format("2006-01-02 15:04:05"), patternNames)
 			if err := ioutil.WriteFile(filename, []byte(content), 0644); err != nil {
 				log.Printf("Error writing context file %s: %v", filename, err)
 			} else {
@@ -128,6 +126,38 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 			go func(p PromptRequest) {
 				defer close(streamChan)
 
+				// fetch and embed web links, limit total size
+				urlRegex := regexp.MustCompile(`https?://[^\s]+`)
+				links := urlRegex.FindAllString(p.UserInput, -1)
+				totalLinkChars := 0
+				const maxLinkChars = 500000
+				for _, link := range links {
+					if totalLinkChars >= maxLinkChars {
+						log.Printf("Skipping remaining URLs: accumulated link content too large")
+						break
+					}
+					resp, err := http.Get(link)
+					if err != nil {
+						log.Printf("Error fetching URL %s: %v", link, err)
+						continue
+					}
+					body, err := ioutil.ReadAll(resp.Body)
+					resp.Body.Close()
+					if err != nil {
+						log.Printf("Error reading response from URL %s: %v", link, err)
+						continue
+					}
+					text := common.StripTags(string(body))
+					if totalLinkChars+len(text) > maxLinkChars {
+						log.Printf("Skipping URL %s: would exceed accumulated content limit", link)
+						continue
+					}
+					content := "URL: " + link + "\n" + text
+					p.UserInput = p.UserInput + "\nURL Content:\n" + content
+					totalLinkChars += len(text)
+					log.Printf("Added content from URL: %s", link)
+				}
+
 				var obsidianFilePath string
 				if p.ObsidianFile != "" {
 					obsidianVaultPath := os.Getenv("OBSIDIAN_VAULT_PATH")
@@ -141,38 +171,15 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 					}
 					if _, err := os.Stat(obsidianFilePath); err == nil {
 						fileContent, err := ioutil.ReadFile(obsidianFilePath)
-						fileContentAmended := "FILENAME: " + string(obsidianFilePath) + "\n" + string(fileContent)
 						if err == nil {
-							escapedContent := strings.ReplaceAll(fileContentAmended, "\n", "\\n")
-							p.UserInput = p.UserInput + ".\n Journal File: " + escapedContent
+							// include actual newlines so parseFilenameBlocks can detect FILENAME
+							fileContentAmended := "FILENAME: " + obsidianFilePath + "\n" + string(fileContent)
+							p.UserInput = p.UserInput + "\nJournal File:\n" + fileContentAmended
 							log.Printf("Added content from obsidian file: %s", obsidianFilePath)
 						} else {
 							log.Printf("Error reading obsidian file %s: %v", obsidianFilePath, err)
 						}
 					}
-				}
-
-				// fetch and embed web links
-				urlRegex := regexp.MustCompile(`https?://[^\s]+`)
-				links := urlRegex.FindAllString(p.UserInput, -1)
-				for _, link := range links {
-					resp, err := http.Get(link)
-					if err != nil {
-						log.Printf("Error fetching URL %s: %v", link, err)
-						continue
-					}
-					body, err := ioutil.ReadAll(resp.Body)
-					resp.Body.Close()
-					if err != nil {
-						log.Printf("Error reading response from URL %s: %v", link, err)
-						continue
-					}
-					text := common.StripTags(string(body))
-
-					content := "URL: " + link + "\n" + text
-					escaped := strings.ReplaceAll(content, "\n", "\\n")
-					p.UserInput = p.UserInput + ":" + escaped
-					log.Printf("Added content from URL: %s", link)
 				}
 
 				chatter, err := h.registry.GetChatter(p.Model, 2048, "", false, false)
@@ -215,8 +222,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 
 				lastMsg := session.GetLastMessage()
 				if lastMsg != nil {
-					content := lastMsg.Content
-					streamChan <- content
+					streamChan <- lastMsg.Content
 				} else {
 					log.Printf("No message content in session")
 					streamChan <- "Error: No response content"

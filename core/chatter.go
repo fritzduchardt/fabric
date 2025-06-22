@@ -162,7 +162,7 @@ func (o *Chatter) BuildSession(request *common.ChatRequest, raw bool) (session *
 
 	var patternContent string
 	if request.PatternName != "" {
-		pattern, err := o.db.Patterns.GetApplyVariables(request.PatternName, request.PatternVariables, "Specific user request: "+request.Message.Content)
+		pattern, err := o.db.Patterns.GetApplyVariables(request.PatternName, request.PatternVariables, "Specific User Request: "+request.Message.Content+"\n")
 		// pattern will now contain user input, and all variables will be resolved, or errored
 
 		if err != nil {
