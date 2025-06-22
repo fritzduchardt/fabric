@@ -126,12 +126,28 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 			go func(p PromptRequest) {
 				defer close(streamChan)
 
-				// fetch and embed web links, limit total size
+				// fetch and embed web links and RSS feeds, limit total size
 				urlRegex := regexp.MustCompile(`https?://[^\s]+`)
 				links := urlRegex.FindAllString(p.UserInput, -1)
 				totalLinkChars := 0
 				const maxLinkChars = 500000
 				for _, link := range links {
+					// detect RSS or XML feed links
+					if strings.HasSuffix(link, ".rss") || strings.HasSuffix(link, ".xml") || strings.HasSuffix(link, ".xml#") {
+						md, err := common.ConvertRSSFeedToMarkdown(link)
+						if totalLinkChars+len(md) > maxLinkChars {
+							log.Printf("Skipping URL %s: would exceed accumulated content limit", link)
+							continue
+						}
+						totalLinkChars += len(md)
+						if err != nil {
+							log.Printf("Error converting RSS feed %s: %v", link, err)
+						} else {
+							p.UserInput = p.UserInput + "\nRSS Feed Markdown:\n" + md
+							log.Printf("Added RSS feed markdown for: %s", link)
+						}
+						continue
+					}
 					if totalLinkChars >= maxLinkChars {
 						log.Printf("Skipping remaining URLs: accumulated link content too large")
 						break

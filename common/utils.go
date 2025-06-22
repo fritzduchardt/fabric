@@ -3,11 +3,13 @@ package common
 import (
 	"errors"
 	"fmt"
+	"github.com/mmcdole/gofeed"
 	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
+	"time"
 )
 
 // GetAbsolutePath resolves a given path to its absolute form, handling ~, ./, ../, UNC paths, and symlinks.
@@ -127,4 +129,49 @@ func StripTags(html string) string {
 	html = regexp.MustCompile(`\s{2,}`).ReplaceAllString(html, "\n\n")
 
 	return html
+}
+
+// ConvertRSSFeedToMarkdown parses an RSS or Atom feed from the given URL
+// and returns its contents as Obsidian-flavored Markdown with double quotes escaped.
+func ConvertRSSFeedToMarkdown(url string) (string, error) {
+	parser := gofeed.NewParser()
+	feed, err := parser.ParseURL(url)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse feed: %w", err)
+	}
+
+	var sb strings.Builder
+	// Feed title as top-level heading
+	if feed.Title != "" {
+		sb.WriteString("# " + feed.Title + "\n\n")
+	}
+
+	for _, item := range feed.Items {
+		// Item title as secondary heading
+		if item.Title != "" {
+			sb.WriteString("## " + item.Title + "\n")
+		}
+		// Published date if available
+		published := time.Now()
+		if item.PublishedParsed != nil {
+			published = *item.PublishedParsed
+		}
+		sb.WriteString("> " + published.Format(time.RFC3339) + "\n\n")
+		// Link to original item
+		if item.Link != "" {
+			sb.WriteString("[Original Link](" + item.Link + ")\n\n")
+		}
+		// Content or description
+		content := item.Content
+		if content == "" {
+			content = item.Description
+		}
+		if content != "" {
+			sb.WriteString(StripTags(content) + "\n\n")
+		}
+	}
+
+	out := sb.String()
+	out = strings.ReplaceAll(out, "\"", "") // escape all double quotes
+	return out, nil
 }

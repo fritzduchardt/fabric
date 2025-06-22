@@ -67,7 +67,26 @@ func (o *PatternsEntity) GetApplyVariables(
 	}
 	urlRegex := regexp.MustCompile(`https?://[^\s]+`)
 	links := urlRegex.FindAllString(pattern.Pattern, -1)
+	totalLinkChars := 0
+	const maxLinkChars = 500000
 	for _, link := range links {
+
+		if strings.HasSuffix(link, ".rss") || strings.HasSuffix(link, ".xml") || strings.HasSuffix(link, ".xml#") {
+			md, err := common.ConvertRSSFeedToMarkdown(link)
+			if totalLinkChars+len(md) > maxLinkChars {
+				log.Printf("Skipping URL %s: would exceed accumulated content limit", link)
+				continue
+			}
+			totalLinkChars += len(md)
+			if err != nil {
+				log.Printf("Error converting RSS feed %s: %v", link, err)
+			} else {
+				pattern.Pattern = pattern.Pattern + "\nRSS Feed Markdown:\n" + md
+				log.Printf("Added RSS feed markdown for: %s", link)
+			}
+			continue
+		}
+
 		resp, err := client.Get(link)
 		if err != nil {
 			log.Printf("Error fetching URL %s: %v", link, err)
@@ -80,6 +99,11 @@ func (o *PatternsEntity) GetApplyVariables(
 			continue
 		}
 		md := common.StripTags(string(body))
+		if totalLinkChars+len(md) > maxLinkChars {
+			log.Printf("Skipping URL %s: would exceed accumulated content limit", link)
+			continue
+		}
+		totalLinkChars += len(md)
 		pattern.Pattern = strings.ReplaceAll(pattern.Pattern, link, md)
 	}
 
