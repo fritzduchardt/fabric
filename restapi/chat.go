@@ -94,7 +94,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 				personalName = "Fritz"
 			}
 			filename := filepath.Join(contextDir, "general_context.md")
-			content := fmt.Sprintf("# CONTEXT\n - My name is %s\n - The current date and time is: %s\n - Pattern name(s): %s\n\n", personalName, now.Format("2006-01-02 15:04:05"), patternNames)
+			content := fmt.Sprintf("# CONTEXT\n - My name is %s\n - The Current Date is: %s\n - Pattern name(s): %s\n\n", personalName, now.Format("2006-01-02"), patternNames)
 			if err := ioutil.WriteFile(filename, []byte(content), 0644); err != nil {
 				log.Printf("Error writing context file %s: %v", filename, err)
 			} else {
