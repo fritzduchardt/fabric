@@ -181,11 +181,32 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 						obsidianVaultPath = filepath.Join(os.Getenv("HOME"), "Documents/Obsidian")
 						log.Printf("Obsidian Vault Path not set. Defaulting to: %s", obsidianVaultPath)
 					}
-					obsidianFilePath = filepath.Join(obsidianVaultPath, p.ObsidianFile)
-					if !strings.HasSuffix(obsidianFilePath, ".md") {
-						obsidianFilePath += ".md"
+
+					// search for file in private vault paths
+					candidate := filepath.Join(obsidianVaultPath, p.ObsidianFile)
+					// make sure to trim shared prefix
+					if !strings.HasSuffix(candidate, ".md") {
+						candidate += ".md"
 					}
-					if _, err := os.Stat(obsidianFilePath); err == nil {
+					if _, err := os.Stat(candidate); err == nil {
+						obsidianFilePath = candidate
+					}
+					if obsidianFilePath == "" {
+						shared := os.Getenv("OBSIDIAN_VAULT_PATH_SHARED")
+						if shared != "" {
+							mdfile := strings.TrimPrefix(p.ObsidianFile, "shared"+string(os.PathSeparator))
+							candidate := filepath.Join(shared, mdfile)
+							// make sure to trim shared prefix
+							if !strings.HasSuffix(candidate, ".md") {
+								candidate += ".md"
+							}
+							if _, err := os.Stat(candidate); err == nil {
+								obsidianFilePath = candidate
+							}
+						}
+					}
+
+					if obsidianFilePath != "" {
 						fileContent, err := ioutil.ReadFile(obsidianFilePath)
 						if err == nil {
 							// include actual newlines so parseFilenameBlocks can detect FILENAME
