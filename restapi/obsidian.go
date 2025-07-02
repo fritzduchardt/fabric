@@ -1,6 +1,7 @@
 package restapi
 
 import (
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -61,6 +62,7 @@ func (h *ObsidianHandler) List(c *gin.Context) {
 }
 
 // Get reads and returns the content of the requested .md file as text/markdown
+// Prepends the clean filepath as the first line prefixed by FILENAME:
 func (h *ObsidianHandler) Get(c *gin.Context) {
 	// c.Param("name") includes leading slash for wildcard routes
 	name := c.Param("name")
@@ -88,5 +90,8 @@ func (h *ObsidianHandler) Get(c *gin.Context) {
 		}
 		return
 	}
-	c.Data(http.StatusOK, "text/markdown", data)
+	// Prepend the clean filepath as the first line
+	header := fmt.Sprintf("FILENAME: %s\n\n", filePath)
+	content := append([]byte(header), data...)
+	c.Data(http.StatusOK, "text/markdown", content)
 }
