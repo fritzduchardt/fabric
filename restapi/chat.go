@@ -176,30 +176,26 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 
 				var obsidianFilePath string
 				if p.ObsidianFile != "" {
-					obsidianVaultPath := os.Getenv("OBSIDIAN_VAULT_PATH")
-					if obsidianVaultPath == "" {
-						obsidianVaultPath = filepath.Join(os.Getenv("HOME"), "Documents/Obsidian")
-						log.Printf("Obsidian Vault Path not set. Defaulting to: %s", obsidianVaultPath)
-					}
-
-					// search for file in private vault paths
-					candidate := filepath.Join(obsidianVaultPath, p.ObsidianFile)
-					// make sure to trim shared prefix
-					if !strings.HasSuffix(candidate, ".md") {
-						candidate += ".md"
-					}
-					if _, err := os.Stat(candidate); err == nil {
-						obsidianFilePath = candidate
-					}
-					if obsidianFilePath == "" {
-						shared := os.Getenv("OBSIDIAN_VAULT_PATH_SHARED")
-						if shared != "" {
-							mdfile := strings.TrimPrefix(p.ObsidianFile, "shared"+string(os.PathSeparator))
-							candidate := filepath.Join(shared, mdfile)
-							// make sure to trim shared prefix
-							if !strings.HasSuffix(candidate, ".md") {
-								candidate += ".md"
+					// gather all vault paths from env vars
+					vaultEnvVars := make(map[string]string)
+					for _, ev := range os.Environ() {
+						if strings.HasPrefix(ev, "OBSIDIAN_VAULT_PATH_") {
+							parts := strings.SplitN(ev, "=", 2)
+							val := parts[1]
+							suffix := ""
+							prefix := ""
+							if i := strings.LastIndex(val, "/"); i >= 0 {
+								prefix = val[:i]
+								suffix = val[i+1:]
 							}
+							vaultEnvVars[suffix] = prefix
+						}
+					}
+					// determine suffix and relative file path
+					obsFile := p.ObsidianFile
+					if parts := strings.SplitN(obsFile, "/", 2); len(parts) == 2 {
+						if vaultPath, ok := vaultEnvVars[parts[0]]; ok {
+							candidate := filepath.Join(vaultPath, obsFile)
 							if _, err := os.Stat(candidate); err == nil {
 								obsidianFilePath = candidate
 							}

@@ -32,17 +32,6 @@ func NewObsidianHandler(r *gin.Engine) {
 			log.Printf("Found Obsidian vault: %s at %s", folderName, vaultPath)
 		}
 	}
-
-	// If no numbered paths found, fall back to legacy env vars
-	if len(vaultPaths) == 0 {
-		defaultVaultPath := os.Getenv("OBSIDIAN_VAULT_PATH")
-		if defaultVaultPath == "" {
-			defaultVaultPath = filepath.Join(os.Getenv("HOME"), "Documents/Obsidian")
-			log.Printf("Obsidian Vault Path not set. Defaulting to: %s", defaultVaultPath)
-		}
-		vaultPaths["private"] = defaultVaultPath
-	}
-
 	handler := &ObsidianHandler{
 		vaultPaths: vaultPaths,
 	}
