@@ -56,7 +56,33 @@ func NewChatHandler(r *gin.Engine, registry *core.PluginRegistry, db *fsdb.Db) *
 	r.POST("/chat", handler.HandleChat)
 	r.POST("/storelast", handler.StoreLast)
 	r.POST("/store", handler.StoreMessage)
+	r.DELETE("/deletepattern/:name", handler.DeletePattern)
 	return handler
+}
+
+// DeletePattern deletes a pattern file from FABRIC_CONFIG_HOME/patterns
+func (h *ChatHandler) DeletePattern(c *gin.Context) {
+
+	name := c.Param("name")
+
+	fabricPatternPath := os.Getenv("FABRIC_PATTERN_PATH")
+	if fabricPatternPath == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "FABRIC_PATTERN_PATH not set"})
+		return
+	}
+	target := filepath.Join(fabricPatternPath, name)
+	// Attempt to remove the file or directory
+	err := os.RemoveAll(target)
+	if err != nil {
+		if os.IsNotExist(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Pattern not found: %s", name)})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error deleting pattern: %v", err)})
+		return
+	}
+	log.Printf("Deleted pattern: %s", target)
+	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Pattern %s deleted successfully", name)})
 }
 
 func (h *ChatHandler) HandleChat(c *gin.Context) {
