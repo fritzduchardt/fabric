@@ -12,12 +12,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// ObsidianHandler handles listing and fetching Obsidian markdown files
+// ObsidianHandler handles listing, fetching, and deleting Obsidian markdown files
 type ObsidianHandler struct {
 	vaultPaths map[string]string
 }
 
-// NewObsidianHandler registers endpoints to list and retrieve Obsidian files
+// NewObsidianHandler registers endpoints to list, retrieve, and delete Obsidian files
 func NewObsidianHandler(r *gin.Engine) {
 	vaultPaths := make(map[string]string)
 
@@ -40,6 +40,8 @@ func NewObsidianHandler(r *gin.Engine) {
 	r.GET("/obsidian/files", handler.List)
 	// Get the content of a specific markdown file by relative name or path (supports subpaths)
 	r.GET("/obsidian/file/*name", handler.Get)
+	// Delete a specific markdown file
+	r.DELETE("/obsidian/file/*name", handler.Delete)
 }
 
 // List returns a JSON array of all .md files in all vaults (relative paths)
@@ -130,4 +132,53 @@ func (h *ObsidianHandler) Get(c *gin.Context) {
 	header := fmt.Sprintf("FILENAME: %s\n\n", filePath)
 	content := append([]byte(header), data...)
 	c.Data(http.StatusOK, "text/markdown", content)
+}
+
+// Delete deletes the specified .md file from the configured vault
+func (h *ObsidianHandler) Delete(c *gin.Context) {
+	name := c.Param("name")
+	name = strings.TrimPrefix(name, "/")
+	if !strings.HasSuffix(name, ".md") {
+		name += ".md"
+	}
+	clean := filepath.Clean(name)
+	parts := strings.Split(clean, string(os.PathSeparator))
+
+	// Security check
+	for _, part := range parts {
+		if strings.HasPrefix(part, ".") {
+			c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
+			return
+		}
+	}
+
+	if len(parts) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid file path"})
+		return
+	}
+
+	vaultPrefix := parts[0]
+	rest := strings.Join(parts[1:], string(os.PathSeparator))
+
+	// Check if the prefix matches a known vault
+	vaultPath, exists := h.vaultPaths[vaultPrefix]
+	if !exists {
+		c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
+		return
+	}
+
+	filePath := filepath.Join(vaultPath, rest)
+	err := os.Remove(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
+		} else if os.IsPermission(err) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "permission denied"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": fmt.Sprintf("deleted %s", filePath)})
 }
