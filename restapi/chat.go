@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -120,7 +121,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 				personalName = "Fritz"
 			}
 			filename := filepath.Join(contextDir, "general_context.md")
-			content := fmt.Sprintf("# CONTEXT\n - My name is %s\n - The Current Date is: %s\n - Pattern name(s): %s\n\n", personalName, now.Format("2006-01-02"), patternNames)
+			content := fmt.Sprintf("# CONTEXT\n - User name: %s\n - The Current Date is: %s\n - Pattern name(s): %s\n\n", personalName, now.Format("2006-01-02"), patternNames)
 			if err := ioutil.WriteFile(filename, []byte(content), 0644); err != nil {
 				log.Printf("Error writing context file %s: %v", filename, err)
 			} else {
@@ -203,27 +204,40 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 				var obsidianFilePath string
 				if p.ObsidianFile != "" {
 					// gather all vault paths from env vars
-					vaultEnvVars := make(map[string]string)
+					type vaultInfo struct {
+						path string
+						idx  int
+					}
+					vaultEnv := make(map[string]vaultInfo)
 					for _, ev := range os.Environ() {
 						if strings.HasPrefix(ev, "OBSIDIAN_VAULT_PATH_") {
-							parts := strings.SplitN(ev, "=", 2)
-							val := parts[1]
+							partsEnv := strings.SplitN(ev, "=", 2)
+							key := partsEnv[0]
+							val := partsEnv[1]
+							keyParts := strings.Split(key, "_")
+							idxStr := keyParts[len(keyParts)-1]
+							idx, err := strconv.Atoi(idxStr)
+							if err != nil {
+								continue
+							}
 							suffix := ""
 							prefix := ""
-							if i := strings.LastIndex(val, "/"); i >= 0 {
-								prefix = val[:i]
-								suffix = val[i+1:]
+							if j := strings.LastIndex(val, "/"); j >= 0 {
+								prefix = val[:j]
+								suffix = val[j+1:]
 							}
-							vaultEnvVars[suffix] = prefix
+							vaultEnv[suffix] = vaultInfo{path: prefix, idx: idx}
 						}
 					}
 					// determine suffix and relative file path
 					obsFile := p.ObsidianFile
+					vaultIdx := 0
 					if parts := strings.SplitN(obsFile, "/", 2); len(parts) == 2 {
-						if vaultPath, ok := vaultEnvVars[parts[0]]; ok {
-							candidate := filepath.Join(vaultPath, obsFile)
+						if vinfo, ok := vaultEnv[parts[0]]; ok {
+							candidate := filepath.Join(vinfo.path, obsFile)
 							if _, err := os.Stat(candidate); err == nil {
 								obsidianFilePath = candidate
+								vaultIdx = vinfo.idx
 							}
 						}
 					}
@@ -233,7 +247,12 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 						if err == nil {
 							// include actual newlines so parseFilenameBlocks can detect FILENAME
 							fileContentAmended := "FILENAME: " + obsidianFilePath + "\n" + string(fileContent)
-							p.UserInput = p.UserInput + "\nJournal File:\n" + fileContentAmended
+							// Add username next to new entry for vault paths 2 or higher
+							specialInstruction := ""
+							if vaultIdx >= 2 {
+								specialInstruction = " - Add User Name next to any change to Journal File, e.g. Bought a new plant today (User Name)."
+							}
+							p.UserInput = p.UserInput + "\n" + specialInstruction + "\nJournal File:\n" + fileContentAmended
 							log.Printf("Added content from obsidian file: %s", obsidianFilePath)
 						} else {
 							log.Printf("Error reading obsidian file %s: %v", obsidianFilePath, err)
