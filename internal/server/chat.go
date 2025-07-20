@@ -3,13 +3,17 @@ package restapi
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/danielmiessler/fabric/internal/chat"
+	"github.com/danielmiessler/fabric/internal/util"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
-
-	"github.com/danielmiessler/fabric/internal/chat"
+	"time"
 
 	"github.com/danielmiessler/fabric/internal/core"
 	"github.com/danielmiessler/fabric/internal/domain"
@@ -30,12 +34,14 @@ type PromptRequest struct {
 	PatternName  string            `json:"patternName"`
 	StrategyName string            `json:"strategyName"`        // Optional strategy name
 	Variables    map[string]string `json:"variables,omitempty"` // Pattern variables
+	ObsidianFile string            `json:"obsidianFile"`
+	SessionName  string            `json:"sessionName"`
 }
 
 type ChatRequest struct {
 	Prompts            []PromptRequest `json:"prompts"`
 	Language           string          `json:"language"` // Add Language field to bind from request
-	domain.ChatOptions                 // Embed the ChatOptions from common package
+	domain.ChatOptions                                   // Embed the ChatOptions from common package
 }
 
 type StreamResponse struct {
@@ -51,8 +57,35 @@ func NewChatHandler(r *gin.Engine, registry *core.PluginRegistry, db *fsdb.Db) *
 	}
 
 	r.POST("/chat", handler.HandleChat)
-
+	r.POST("/storelast", handler.StoreLast)
+	r.POST("/store", handler.StoreMessage)
+	r.DELETE("/deletepattern/:name", handler.DeletePattern)
 	return handler
+}
+
+// DeletePattern deletes a pattern file from FABRIC_CONFIG_HOME/patterns
+func (h *ChatHandler) DeletePattern(c *gin.Context) {
+
+	name := c.Param("name")
+
+	fabricPatternPath := os.Getenv("FABRIC_PATTERN_PATH")
+	if fabricPatternPath == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "FABRIC_PATTERN_PATH not set"})
+		return
+	}
+	target := filepath.Join(fabricPatternPath, name)
+	// Attempt to remove the file or directory
+	err := os.RemoveAll(target)
+	if err != nil {
+		if os.IsNotExist(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Pattern not found: %s", name)})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error deleting pattern: %v", err)})
+		return
+	}
+	log.Printf("Deleted pattern: %s", target)
+	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Pattern %s deleted successfully", name)})
 }
 
 func (h *ChatHandler) HandleChat(c *gin.Context) {
@@ -65,6 +98,40 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 		return
 	}
 
+	fabricHome := os.Getenv("FABRIC_CONFIG_HOME")
+	if fabricHome == "" {
+		log.Printf("FABRIC_CONFIG_HOME not set, skipping context file write")
+	} else {
+		contextDir := filepath.Join(fabricHome, "contexts")
+		if err := os.MkdirAll(contextDir, 0755); err != nil {
+			log.Printf("Error creating context directory %s: %v", contextDir, err)
+		} else {
+			var patternSet = make(map[string]bool)
+			for _, p := range request.Prompts {
+				if p.PatternName != "" {
+					patternSet[p.PatternName] = true
+				}
+			}
+			var patternNamesSlice []string
+			for name := range patternSet {
+				patternNamesSlice = append(patternNamesSlice, name)
+			}
+			patternNames := strings.Join(patternNamesSlice, ", ")
+			now := time.Now()
+			personalName := os.Getenv("PERSONAL_NAME")
+			if personalName == "" {
+				personalName = "Fritz"
+			}
+			filename := filepath.Join(contextDir, "general_context.md")
+			content := fmt.Sprintf("# CONTEXT\n - User name: %s\n - The Current Date is: %s\n - Pattern name(s): %s\n\n", personalName, now.Format("2006-01-02"), patternNames)
+			if err := ioutil.WriteFile(filename, []byte(content), 0644); err != nil {
+				log.Printf("Error writing context file %s: %v", filename, err)
+			} else {
+				log.Printf("Wrote context file: %s", filename)
+			}
+		}
+	}
+
 	// Add log to check received language field
 	log.Printf("Received chat request - Language: '%s', Prompts: %d", request.Language, len(request.Prompts))
 
@@ -72,7 +139,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 	c.Writer.Header().Set("Content-Type", "text/readystream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
 	c.Writer.Header().Set("Connection", "keep-alive")
-	c.Writer.Header().Set("Access-Control-Allow-Origin", "http://localhost:5173")
+	c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 	c.Writer.Header().Set("X-Accel-Buffering", "no")
 
 	clientGone := c.Writer.CloseNotify()
@@ -83,24 +150,117 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 			log.Printf("Client disconnected")
 			return
 		default:
-			log.Printf("Processing prompt %d: Model=%s Pattern=%s Context=%s",
-				i+1, prompt.Model, prompt.PatternName, prompt.ContextName)
+			log.Printf("Processing prompt %d: Model=%s Pattern=%s Context=%s ObsidianFile=%s",
+				i+1, prompt.Model, prompt.PatternName, prompt.ContextName, prompt.ObsidianFile)
 
 			streamChan := make(chan string)
 
 			go func(p PromptRequest) {
 				defer close(streamChan)
 
-				// Load and prepend strategy prompt if strategyName is set
-				if p.StrategyName != "" {
-					strategyFile := filepath.Join(os.Getenv("HOME"), ".config", "fabric", "strategies", p.StrategyName+".json")
-					data, err := os.ReadFile(strategyFile)
-					if err == nil {
-						var s struct {
-							Prompt string `json:"prompt"`
+				// fetch and embed web links and RSS feeds, limit total size
+				urlRegex := regexp.MustCompile(`https?://[^\s]+`)
+				links := urlRegex.FindAllString(p.UserInput, -1)
+				totalLinkChars := 0
+				const maxLinkChars = 500000
+				for _, link := range links {
+					// detect RSS or XML feed links
+					if strings.HasSuffix(link, ".rss") || strings.HasSuffix(link, ".xml") || strings.HasSuffix(link, ".xml#") {
+						md, err := util.ConvertRSSFeedToMarkdown(link)
+						if totalLinkChars+len(md) > maxLinkChars {
+							log.Printf("Skipping URL %s: would exceed accumulated content limit", link)
+							continue
 						}
-						if err := json.Unmarshal(data, &s); err == nil && s.Prompt != "" {
-							p.UserInput = s.Prompt + "\n" + p.UserInput
+						totalLinkChars += len(md)
+						if err != nil {
+							log.Printf("Error converting RSS feed %s: %v", link, err)
+						} else {
+							p.UserInput = p.UserInput + "\nRSS Feed Markdown:\n" + md
+							log.Printf("Added RSS feed markdown for: %s", link)
+						}
+						continue
+					}
+					if totalLinkChars >= maxLinkChars {
+						log.Printf("Skipping remaining URLs: accumulated link content too large")
+						break
+					}
+					resp, err := http.Get(link)
+					if err != nil {
+						log.Printf("Error fetching URL %s: %v", link, err)
+						continue
+					}
+					body, err := ioutil.ReadAll(resp.Body)
+					resp.Body.Close()
+					if err != nil {
+						log.Printf("Error reading response from URL %s: %v", link, err)
+						continue
+					}
+					text := util.StripTags(string(body))
+					if totalLinkChars+len(text) > maxLinkChars {
+						log.Printf("Skipping URL %s: would exceed accumulated content limit", link)
+						continue
+					}
+					content := "URL: " + link + "\n" + text
+					p.UserInput = p.UserInput + "\nURL Content:\n" + content
+					totalLinkChars += len(text)
+					log.Printf("Added content from URL: %s", link)
+				}
+
+				var obsidianFilePath string
+				if p.ObsidianFile != "" {
+					// gather all vault paths from env vars
+					type vaultInfo struct {
+						path string
+						idx  int
+					}
+					vaultEnv := make(map[string]vaultInfo)
+					for _, ev := range os.Environ() {
+						if strings.HasPrefix(ev, "OBSIDIAN_VAULT_PATH_") {
+							partsEnv := strings.SplitN(ev, "=", 2)
+							key := partsEnv[0]
+							val := partsEnv[1]
+							keyParts := strings.Split(key, "_")
+							idxStr := keyParts[len(keyParts)-1]
+							idx, err := strconv.Atoi(idxStr)
+							if err != nil {
+								continue
+							}
+							suffix := ""
+							prefix := ""
+							if j := strings.LastIndex(val, "/"); j >= 0 {
+								prefix = val[:j]
+								suffix = val[j+1:]
+							}
+							vaultEnv[suffix] = vaultInfo{path: prefix, idx: idx}
+						}
+					}
+					// determine suffix and relative file path
+					obsFile := p.ObsidianFile
+					vaultIdx := 0
+					if parts := strings.SplitN(obsFile, "/", 2); len(parts) == 2 {
+						if vinfo, ok := vaultEnv[parts[0]]; ok {
+							candidate := filepath.Join(vinfo.path, obsFile)
+							if _, err := os.Stat(candidate); err == nil {
+								obsidianFilePath = candidate
+								vaultIdx = vinfo.idx
+							}
+						}
+					}
+
+					if obsidianFilePath != "" {
+						fileContent, err := ioutil.ReadFile(obsidianFilePath)
+						if err == nil {
+							// include actual newlines so parseFilenameBlocks can detect FILENAME
+							fileContentAmended := "FILENAME: " + obsidianFilePath + "\n" + string(fileContent)
+							// Add username next to new entry for vault paths 2 or higher
+							specialInstruction := ""
+							if vaultIdx >= 2 {
+								specialInstruction = " - Add User Name next to any change to Journal File, e.g. Bought a new plant today (User Name)."
+							}
+							p.UserInput = p.UserInput + "\n" + specialInstruction + "\nJournal File:\n" + fileContentAmended
+							log.Printf("Added content from obsidian file: %s", obsidianFilePath)
+						} else {
+							log.Printf("Error reading obsidian file %s: %v", obsidianFilePath, err)
 						}
 					}
 				}
@@ -120,9 +280,9 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 					},
 					PatternName:      p.PatternName,
 					ContextName:      p.ContextName,
-					PatternVariables: p.Variables,      // Pass pattern variables
-					Language:         request.Language, // Pass the language field
-				}
+					PatternVariables: p.Variables, // Pass pattern variables
+					Language:         request.Language,
+					SessionName:      p.SessionName}
 
 				opts := &domain.ChatOptions{
 					Model:            p.Model,
@@ -191,6 +351,142 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 			}
 		}
 	}
+}
+
+func (h *ChatHandler) StoreLast(c *gin.Context) {
+	var req struct {
+		SessionName string `json:"sessionName"`
+	}
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.SessionName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "sessionName is required"})
+		return
+	}
+	fabricHome := os.Getenv("FABRIC_CONFIG_HOME")
+	if fabricHome == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "FABRIC_CONFIG_HOME not set"})
+		return
+	}
+	sessionsDir := filepath.Join(fabricHome, "sessions")
+	data, err := ioutil.ReadFile(filepath.Join(sessionsDir, req.SessionName+".json"))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error reading session file: %v", err)})
+		return
+	}
+	var msgs []struct {
+		Role    string `json:"role"`
+		Content string `json:"content"`
+	}
+	if err := json.Unmarshal(data, &msgs); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error parsing session JSON: %v", err)})
+		return
+	}
+	var assistantContent string
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role == "assistant" {
+			assistantContent = msgs[i].Content
+			break
+		}
+	}
+	if assistantContent == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "no assistant message found in session"})
+		return
+	}
+	parsed := parseFilenameBlocks(assistantContent)
+	var savedFilenames []string
+	if len(parsed) > 0 {
+		for filename, content := range parsed {
+			dir := filepath.Dir(filename)
+			if dir != "" && dir != "." {
+				if err := os.MkdirAll(dir, 0755); err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error creating directory: %v", err)})
+					return
+				}
+			}
+			if err := ioutil.WriteFile(filename, []byte(content), 0644); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error writing file %s: %v", filename, err)})
+				return
+			}
+			log.Printf("Stored assistant content to %s", filename)
+			savedFilenames = append(savedFilenames, filename)
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"message":   "Last content stored successfully",
+			"filenames": savedFilenames,
+		})
+	} else {
+		c.JSON(http.StatusOK, gin.H{
+			"message": "No FILENAME markers found; nothing stored",
+		})
+	}
+}
+
+func (h *ChatHandler) StoreMessage(c *gin.Context) {
+	var req struct {
+		Prompt string `json:"prompt"`
+	}
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.Prompt == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "prompt is required"})
+		return
+	}
+	parsed := parseFilenameBlocks(req.Prompt)
+	var savedFilenames []string
+	if len(parsed) > 0 {
+		for filename, content := range parsed {
+			dir := filepath.Dir(filename)
+			if dir != "" && dir != "." {
+				if err := os.MkdirAll(dir, 0755); err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error creating directory: %v", err)})
+					return
+				}
+			}
+			if err := ioutil.WriteFile(filename, []byte(content), 0644); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error writing file %s: %v", filename, err)})
+				return
+			}
+			log.Printf("Stored message content to %s", filename)
+			savedFilenames = append(savedFilenames, filename)
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"message":   "Content stored successfully",
+			"filenames": savedFilenames,
+		})
+	} else {
+		c.JSON(http.StatusOK, gin.H{
+			"message": "No FILENAME markers found; nothing stored",
+		})
+	}
+}
+
+func parseFilenameBlocks(input string) map[string]string {
+	blocks := make(map[string]string)
+	lines := strings.Split(input, "\n")
+	var current string
+	var buf []string
+	for _, l := range lines {
+		if strings.HasPrefix(l, "FILENAME:") {
+			if current != "" {
+				blocks[current] = strings.Join(buf, "\n")
+				buf = nil
+			}
+			current = strings.TrimSpace(strings.TrimPrefix(l, "FILENAME:"))
+		} else {
+			if current != "" {
+				buf = append(buf, l)
+			}
+		}
+	}
+	if current != "" {
+		blocks[current] = strings.Join(buf, "\n")
+	}
+	return blocks
 }
 
 func writeSSEResponse(w gin.ResponseWriter, response StreamResponse) error {

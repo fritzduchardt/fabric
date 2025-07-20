@@ -9,6 +9,15 @@ import (
 
 	"github.com/danielmiessler/fabric/internal/plugins/template"
 	"github.com/danielmiessler/fabric/internal/util"
+
+	"io/ioutil"
+	"log"
+	"net/http"
+	"regexp"
+)
+
+var (
+	placeholderRe = regexp.MustCompile(`{{\s*[^{}\s]+\s*}}`)
 )
 
 const inputSentinel = "__FABRIC_INPUT_SENTINEL_TOKEN__"
@@ -57,6 +66,56 @@ func (o *PatternsEntity) GetApplyVariables(
 
 	// Apply variables to the pattern
 	err = o.applyVariables(pattern, variables, input)
+
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 5 {
+				return fmt.Errorf("stopped after 5 redirects")
+			}
+			return nil
+		},
+	}
+	urlRegex := regexp.MustCompile(`https?://[^\s]+`)
+	links := urlRegex.FindAllString(pattern.Pattern, -1)
+	totalLinkChars := 0
+	const maxLinkChars = 500000
+	for _, link := range links {
+
+		if strings.HasSuffix(link, ".rss") || strings.HasSuffix(link, ".xml") || strings.HasSuffix(link, ".xml#") {
+			md, err := util.ConvertRSSFeedToMarkdown(link)
+			if totalLinkChars+len(md) > maxLinkChars {
+				log.Printf("Skipping URL %s: would exceed accumulated content limit", link)
+				continue
+			}
+			totalLinkChars += len(md)
+			if err != nil {
+				log.Printf("Error converting RSS feed %s: %v", link, err)
+			} else {
+				pattern.Pattern = pattern.Pattern + "\nRSS Feed Markdown:\n" + md
+				log.Printf("Added RSS feed markdown for: %s", link)
+			}
+			continue
+		}
+
+		resp, err := client.Get(link)
+		if err != nil {
+			log.Printf("Error fetching URL %s: %v", link, err)
+			continue
+		}
+		body, err := ioutil.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			log.Printf("Error reading response from URL %s: %v", link, err)
+			continue
+		}
+		md := util.StripTags(string(body))
+		if totalLinkChars+len(md) > maxLinkChars {
+			log.Printf("Skipping URL %s: would exceed accumulated content limit", link)
+			continue
+		}
+		totalLinkChars += len(md)
+		pattern.Pattern = strings.ReplaceAll(pattern.Pattern, link, md)
+	}
 	return
 }
 
@@ -81,6 +140,10 @@ func (o *PatternsEntity) applyVariables(
 	var processed string
 	if processed, err = template.ApplyTemplate(withSentinel, variables, ""); err != nil {
 		return
+	}
+
+	if placeholderRe.MatchString(processed) {
+		return fmt.Errorf("unresolved placeholders in pattern: %s", placeholderRe.FindString(processed))
 	}
 
 	// Finally, replace our sentinel with the actual user input

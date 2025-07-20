@@ -190,8 +190,7 @@ func (o *Chatter) BuildSession(request *domain.ChatRequest, raw bool) (session *
 	var patternContent string
 	inputUsed := false
 	if request.PatternName != "" {
-		pattern, err := o.db.Patterns.GetApplyVariables(request.PatternName, request.PatternVariables, request.Message.Content)
-
+		pattern, err := o.db.Patterns.GetApplyVariables(request.PatternName, request.PatternVariables, "Specific User Request: "+request.Message.Content+"\n")
 		if err != nil {
 			return nil, fmt.Errorf("could not get pattern %s: %v", request.PatternName, err)
 		}
@@ -199,7 +198,7 @@ func (o *Chatter) BuildSession(request *domain.ChatRequest, raw bool) (session *
 		inputUsed = true
 	}
 
-	systemMessage := strings.TrimSpace(contextContent) + strings.TrimSpace(patternContent)
+	systemMessage := strings.TrimSpace(contextContent) + "\n" + strings.TrimSpace(patternContent)
 
 	if request.StrategyName != "" {
 		strategy, err := strategy.LoadStrategy(request.StrategyName)

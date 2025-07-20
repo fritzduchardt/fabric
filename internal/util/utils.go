@@ -3,10 +3,13 @@ package util
 import (
 	"errors"
 	"fmt"
+	"github.com/mmcdole/gofeed"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
+	"time"
 )
 
 // GetAbsolutePath resolves a given path to its absolute form, handling ~, ./, ../, UNC paths, and symlinks.
@@ -88,4 +91,105 @@ func GetDefaultConfigPath() (string, error) {
 		return "", fmt.Errorf("error accessing default config path: %w", err)
 	}
 	return defaultConfigPath, nil
+}
+
+var (
+	// Updated to match all a tags with href attribute where href is not a local link
+	linkRe = regexp.MustCompile(`(?i)(?s)<a\s+[^>]*href="([^#].*?)"[^>]*>(.*?)<\/a>`)
+	//hRe           = regexp.MustCompile(`(?i)<h([1-6])>(.*?)</h[1-6]>`)
+	strongRe      = regexp.MustCompile(`(?i)<(?:strong|b)>(.*?)</(?:strong|b)>`)
+	emRe          = regexp.MustCompile(`(?i)<(?:em|i)>(.*?)</(?:em|i)>`)
+	liRe          = regexp.MustCompile(`(?i)<li>(.*?)</li>`)
+	pRe           = regexp.MustCompile(`(?i)<p>(.*?)</p>`)
+	brRe          = regexp.MustCompile(`(?i)<br\s*/?>`)
+	tagRe         = regexp.MustCompile(`<[^>]+>`)
+	scriptStyleRe = regexp.MustCompile(`(?is)<(?:script|style|link|meta)[^>]*>.*?</(?:script|style)>`)
+)
+
+// StripTags converts HTML to Markdown by removing HTML tags and formatting the content
+func StripTags(html string) string {
+	html = scriptStyleRe.ReplaceAllString(html, "")
+	// does not work for faz
+	//html = hRe.ReplaceAllStringFunc(html, func(s string) string {
+	//	parts := hRe.FindStringSubmatch(s)
+	//	level, _ := strconv.Atoi(parts[1])
+	//	content := parts[2]
+	//	return strings.Repeat("#", level) + " " + content + "\n\n"
+	//})
+	html = linkRe.ReplaceAllStringFunc(html, func(s string) string {
+		parts := linkRe.FindStringSubmatch(s)
+		href := parts[1]
+		text := parts[2]
+		// replace line breaks with full stops
+		text = strings.ReplaceAll(text, "\n", ".")
+		text = strings.ReplaceAll(text, "\r", ".")
+
+		return "[" + text + "](" + href + ")"
+	})
+	html = strongRe.ReplaceAllString(html, "**$1**")
+	html = emRe.ReplaceAllString(html, "*$1*")
+	html = liRe.ReplaceAllString(html, "- $1\n")
+	html = pRe.ReplaceAllString(html, "$1\n\n")
+	html = brRe.ReplaceAllString(html, "\n")
+	html = tagRe.ReplaceAllString(html, "")
+
+	// remove lines with up to three words, keep empty lines
+	lines := strings.Split(html, "\n")
+	var kept []string
+	for _, line := range lines {
+		words := strings.Fields(line)
+		if len(words) == 0 || len(words) > 3 {
+			kept = append(kept, line)
+		}
+	}
+	html = strings.Join(kept, "\n")
+	// normalize multiple consecutive newlines to two newlines
+	html = regexp.MustCompile(`\s{2,}`).ReplaceAllString(html, "\n\n")
+
+	return html
+}
+
+// ConvertRSSFeedToMarkdown parses an RSS or Atom feed from the given URL
+// and returns its contents as Obsidian-flavored Markdown with double quotes escaped.
+func ConvertRSSFeedToMarkdown(url string) (string, error) {
+	parser := gofeed.NewParser()
+	feed, err := parser.ParseURL(url)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse feed: %w", err)
+	}
+
+	var sb strings.Builder
+	// Feed title as top-level heading
+	if feed.Title != "" {
+		sb.WriteString("# " + feed.Title + "\n\n")
+	}
+
+	for _, item := range feed.Items {
+		// Item title as secondary heading
+		if item.Title != "" {
+			sb.WriteString("## " + item.Title + "\n")
+		}
+		// Published date if available
+		published := time.Now()
+		if item.PublishedParsed != nil {
+			published = *item.PublishedParsed
+		}
+		sb.WriteString("> " + published.Format(time.RFC3339) + "\n\n")
+		// Link to original item
+		if item.Link != "" {
+			sb.WriteString("[Original Link](" + item.Link + ")\n\n")
+		}
+		// Content or description
+		content := item.Content
+		if content == "" {
+			content = item.Description
+		}
+		if content != "" {
+			sb.WriteString(StripTags(content) + "\n\n")
+		}
+	}
+
+	out := sb.String()
+	out = strings.ReplaceAll(out, "\"", "") // escape all double quotes
+	return out, nil
 }
