@@ -248,10 +248,10 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 					}
 
 					if obsidianFilePath != "" {
-						fileContent, err := ioutil.ReadFile(obsidianFilePath)
+						contentToUse, err := readObsidianFile(obsidianFilePath)
 						if err == nil {
 							// include actual newlines so parseFilenameBlocks can detect FILENAME
-							fileContentAmended := "FILENAME: " + obsidianFilePath + "\n" + string(fileContent)
+							fileContentAmended := "FILENAME: " + obsidianFilePath + "\n" + contentToUse
 							// Add username next to new entry for vault paths 2 or higher
 							specialInstruction := ""
 							if vaultIdx >= 2 {
@@ -351,6 +351,57 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 			}
 		}
 	}
+}
+
+func readObsidianFile(path string) (string, error) {
+	fileContent, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	contentToUse := string(fileContent)
+	dateRegex := regexp.MustCompile(`\b(\d{4}-\d{2}-\d{2})\b`)
+	monthsBack, err := strconv.Atoi(os.Getenv("JOURNAL_FILE_RETRO_MONTHS"))
+	if err != nil {
+		return "", err
+	}
+	// If the file contains dates, filter it to include only the last three months of entries.
+	// If no dates are found, the entire file content is used.
+	if dateRegex.MatchString(contentToUse) {
+		var sb strings.Builder
+		lines := strings.Split(contentToUse, "\n")
+		threeMonthsAgo := time.Now().AddDate(0, -monthsBack, 0)
+		// Content before the first dated entry is included by default.
+		currentSectionIsRecent := true
+
+		for _, line := range lines {
+			isNewSectionHeader := false
+			isNewSectionRecent := false
+
+			// Check if the line contains a date and marks a new section.
+			matches := dateRegex.FindStringSubmatch(line)
+			if len(matches) > 1 {
+				dateStr := matches[1]
+				lineDate, err := time.Parse("2006-01-02", dateStr)
+				if err == nil {
+					isNewSectionHeader = true
+					isNewSectionRecent = !lineDate.Before(threeMonthsAgo)
+				}
+			}
+
+			// If a new dated section starts, update whether we should include content.
+			if isNewSectionHeader {
+				currentSectionIsRecent = isNewSectionRecent
+			}
+
+			// Append the line if it's part of a recent section.
+			if currentSectionIsRecent {
+				sb.WriteString(line)
+				sb.WriteString("\n")
+			}
+		}
+		contentToUse = strings.TrimSuffix(sb.String(), "\n")
+	}
+	return contentToUse, nil
 }
 
 func (h *ChatHandler) StoreLast(c *gin.Context) {
