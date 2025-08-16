@@ -41,7 +41,7 @@ type PromptRequest struct {
 type ChatRequest struct {
 	Prompts            []PromptRequest `json:"prompts"`
 	Language           string          `json:"language"` // Add Language field to bind from request
-	domain.ChatOptions                                   // Embed the ChatOptions from common package
+	domain.ChatOptions                 // Embed the ChatOptions from common package
 }
 
 type StreamResponse struct {

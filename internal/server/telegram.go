@@ -87,4 +87,3 @@ func (h *TelegramHandler) SendMessage(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Message sent successfully"})
 }
-

@@ -32,6 +32,7 @@ func Serve(registry *core.PluginRegistry, address string, apiKey string) (err er
 	NewModelsHandler(r, registry.VendorManager)
 	NewStrategiesHandler(r)
 	NewObsidianHandler(r)
+	NewTelegramHandler(r)
 
 	// Start server
 	err = r.Run(address)
