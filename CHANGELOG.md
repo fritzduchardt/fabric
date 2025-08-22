@@ -1,5 +1,346 @@
 # Changelog
 
+## v1.4.294 (2025-08-20)
+
+### PR [#1723](https://github.com/danielmiessler/Fabric/pull/1723) by [ksylvan](https://github.com/ksylvan): docs: update README with Venice AI provider and Windows install script
+
+- Add Venice AI provider configuration with API endpoint
+- Document Venice AI as privacy-first open-source provider
+- Include PowerShell installation script for Windows users
+- Add debug levels section to table of contents
+- Update recent major features with v1.4.294 release notes
+
+## v1.4.293 (2025-08-19)
+
+### PR [#1718](https://github.com/danielmiessler/Fabric/pull/1718) by [ksylvan](https://github.com/ksylvan): Implement Configurable Debug Logging Levels
+
+- Add --debug flag controlling runtime logging verbosity levels
+- Introduce internal/log package with Off, Basic, Detailed, Trace
+- Replace ad-hoc Debugf and globals with centralized debug logger
+- Wire debug level during early CLI argument parsing
+- Add bash, zsh, fish completions for --debug levels
+
+## v1.4.292 (2025-08-18)
+
+### PR [#1717](https://github.com/danielmiessler/Fabric/pull/1717) by [ksylvan](https://github.com/ksylvan): Highlight default vendor/model in model listing
+
+- Update PrintWithVendor signature to accept default vendor and model
+- Mark default vendor/model with asterisk in non-shell output
+- Compare vendor and model case-insensitively when marking
+- Pass registry defaults to PrintWithVendor from CLI
+- Add test ensuring default selection appears with asterisk
+### Direct commits
+
+- Docs: update version number in README updates section from v1.4.290 to v1.4.291
+
+## v1.4.291 (2025-08-18)
+
+### PR [#1715](https://github.com/danielmiessler/Fabric/pull/1715) by [ksylvan](https://github.com/ksylvan): feat: add speech-to-text via OpenAI with transcription flags and comp…
+
+- Add --transcribe-file flag to transcribe audio or video
+- Add --transcribe-model flag with model listing and completion
+- Add --split-media-file flag to chunk files over 25MB
+- Implement OpenAI transcription using Whisper and GPT-4o Transcribe
+- Integrate transcription pipeline into CLI before readability processing
+
+## v1.4.290 (2025-08-17)
+
+### PR [#1714](https://github.com/danielmiessler/Fabric/pull/1714) by [ksylvan](https://github.com/ksylvan): feat: add per-pattern model mapping support via environment variables
+
+- Add per-pattern model mapping support via environment variables
+- Implement environment variable lookup for pattern-specific models
+- Support vendor|model format in environment variable specification
+- Enable shell startup file configuration for patterns
+- Transform pattern names to uppercase environment variable format
+
+## v1.4.289 (2025-08-16)
+
+### PR [#1710](https://github.com/danielmiessler/Fabric/pull/1710) by [ksylvan](https://github.com/ksylvan): feat: add --no-variable-replacement flag to disable pattern variable …
+
+- Add --no-variable-replacement flag to disable pattern variable substitution
+- Introduce CLI flag to skip pattern variable replacement and wire it into domain request and session builder
+- Provide PatternsEntity.GetWithoutVariables for input-only pattern processing support
+- Refactor patterns code into reusable load and apply helpers
+- Update bash, zsh, fish completions with new flag and document in README and CLI help output
+
+## v1.4.288 (2025-08-16)
+
+### PR [#1709](https://github.com/danielmiessler/Fabric/pull/1709) by [ksylvan](https://github.com/ksylvan): Enhanced YouTube Subtitle Language Fallback Handling
+
+- Fix: improve YouTube subtitle language fallback handling in yt-dlp integration
+- Fix typo "Gemmini" to "Gemini" in README
+- Add "kballard" and "shellquote" to VSCode dictionary
+- Add "YTDLP" to VSCode spell checker
+- Enhance subtitle language options with fallback variants
+
+## v1.4.287 (2025-08-14)
+
+### PR [#1706](https://github.com/danielmiessler/Fabric/pull/1706) by [ksylvan](https://github.com/ksylvan): Gemini Thinking Support and README (New Features) automation
+
+- Add comprehensive "Recent Major Features" section to README
+- Introduce new readme_updates Python script for automation
+- Enable Gemini thinking configuration with token budgets
+- Update CLI help text for Gemini thinking support
+- Add comprehensive test coverage for Gemini thinking
+
+## v1.4.286 (2025-08-14)
+
+### PR [#1700](https://github.com/danielmiessler/Fabric/pull/1700) by [ksylvan](https://github.com/ksylvan): Introduce Thinking Config Across Anthropic and OpenAI Providers
+
+- Add --thinking CLI flag for configurable reasoning levels across providers
+- Implement Anthropic ThinkingConfig with standardized budgets and tokens
+- Map OpenAI reasoning effort from thinking levels
+- Show thinking level in dry-run formatted options
+- Overhaul suggest_pattern docs with categories, workflows, usage examples
+
+## v1.4.285 (2025-08-13)
+
+### PR [#1698](https://github.com/danielmiessler/Fabric/pull/1698) by [ksylvan](https://github.com/ksylvan): Enable One Million Token Context Beta Feature for Sonnet-4
+
+- Chore: upgrade anthropic-sdk-go to v1.9.1 and add beta feature support for context-1m
+- Add modelBetas map for beta feature configuration
+- Implement context-1m-2025-08-07 beta for Claude Sonnet 4
+- Add beta header support with fallback handling
+- Preserve existing beta headers in OAuth transport
+
+## v1.4.284 (2025-08-12)
+
+### PR [#1695](https://github.com/danielmiessler/Fabric/pull/1695) by [ksylvan](https://github.com/ksylvan): Introduce One-Liner Curl Install for Completions
+
+- Add one-liner curl install method for shell completions without requiring repository cloning
+- Support downloading completions when files are missing locally with dry-run option for previewing changes
+- Enable custom download source via environment variable and create temporary directory for downloaded completion files
+- Add automatic cleanup of temporary files and validate downloaded files are non-empty and not HTML
+- Improve error handling and standardize logging by routing informational messages to stderr to avoid stdout pollution
+
+## v1.4.283 (2025-08-12)
+
+### PR [#1692](https://github.com/danielmiessler/Fabric/pull/1692) by [ksylvan](https://github.com/ksylvan): Add Vendor Selection Support for Models
+
+- Add -V/--vendor flag to specify model vendor
+- Implement vendor-aware model resolution and availability validation
+- Warn on ambiguous models; suggest --vendor to disambiguate
+- Update bash, zsh, fish completions with vendor suggestions
+- Extend --listmodels to print vendor|model when interactive
+
+## v1.4.282 (2025-08-11)
+
+### PR [#1689](https://github.com/danielmiessler/Fabric/pull/1689) by [ksylvan](https://github.com/ksylvan): Enhanced Shell Completions for Fabric CLI Binaries
+
+- Add 'fabric-ai' alias support across all shell completions
+- Use invoked command name for dynamic completion list queries
+- Refactor fish completions into reusable registrar for multiple commands
+- Update Bash completion to reference executable via COMP_WORDS[0]
+- Install completions automatically with new cross-shell setup script
+
+## v1.4.281 (2025-08-11)
+
+### PR [#1687](https://github.com/danielmiessler/Fabric/pull/1687) by [ksylvan](https://github.com/ksylvan): Add Web Search Tool Support for Gemini Models
+
+- Enable Gemini models to use web search tool with --search flag
+- Add validation for search-location timezone and language code formats
+- Normalize language codes from underscores to hyphenated form
+- Append deduplicated web citations under standardized Sources section
+- Improve robustness for nil candidates and content parts
+
+## v1.4.280 (2025-08-10)
+
+### PR [#1686](https://github.com/danielmiessler/Fabric/pull/1686) by [ksylvan](https://github.com/ksylvan): Prevent duplicate text output in OpenAI streaming responses
+
+- Fix: prevent duplicate text output in OpenAI streaming responses
+- Skip processing of ResponseOutputTextDone events
+- Prevent doubled text in stream output
+- Add clarifying comment about API behavior
+- Maintain delta chunk streaming functionality
+
+## v1.4.279 (2025-08-10)
+
+### PR [#1685](https://github.com/danielmiessler/Fabric/pull/1685) by [ksylvan](https://github.com/ksylvan): Fix Gemini Role Mapping for API Compatibility
+
+- Fix Gemini role mapping to ensure proper API compatibility by converting chat roles to Gemini's user/model format
+- Map assistant role to model role per Gemini API constraints
+- Map system, developer, function, and tool roles to user role for proper handling
+- Default unrecognized roles to user role to preserve instruction context
+- Add comprehensive unit tests to validate convertMessages role mapping logic
+
+## v1.4.278 (2025-08-09)
+
+### PR [#1681](https://github.com/danielmiessler/Fabric/pull/1681) by [ksylvan](https://github.com/ksylvan): Enhance YouTube Support with Custom yt-dlp Arguments
+
+- Add `--yt-dlp-args` flag for custom YouTube downloader options with advanced control capabilities
+- Implement smart subtitle language fallback system when requested locale is unavailable
+- Add fallback logic for YouTube subtitle language detection with auto-detection of downloaded languages
+- Replace custom argument parser with shellquote and precompile regexes for improved performance and safety
+
+## v1.4.277 (2025-08-08)
+
+### PR [#1679](https://github.com/danielmiessler/Fabric/pull/1679) by [ksylvan](https://github.com/ksylvan): Add cross-platform desktop notifications to Fabric CLI
+
+- Add cross-platform desktop notifications with secure custom commands
+- Integrate notification sending into chat processing workflow
+- Add --notification and --notification-command CLI flags and help
+- Provide cross-platform providers: macOS, Linux, Windows with fallbacks
+- Escape shell metacharacters to prevent injection vulnerabilities
+
+## v1.4.276 (2025-08-08)
+
+### Direct commits
+
+- Ci: add write permissions to update_release_notes job
+
+- Add contents write permission to release notes job
+
+- Enable GitHub Actions to modify repository contents
+- Fix potential permission issues during release process
+
+## v1.4.275 (2025-08-07)
+
+### PR [#1676](https://github.com/danielmiessler/Fabric/pull/1676) by [ksylvan](https://github.com/ksylvan): Refactor authentication to support GITHUB_TOKEN and GH_TOKEN
+
+- Refactor: centralize GitHub token retrieval logic into utility function
+- Support both GITHUB_TOKEN and GH_TOKEN environment variables with fallback handling
+- Add new util/token.go file for centralized token handling across the application
+- Update walker.go and main.go to use the new centralized token utility function
+- Feat: add 'gpt-5' to raw-mode models in OpenAI client to bypass structured chat message formatting
+
+## v1.4.274 (2025-08-07)
+
+### PR [#1673](https://github.com/danielmiessler/Fabric/pull/1673) by [ksylvan](https://github.com/ksylvan): Add Support for Claude Opus 4.1 Model
+
+- Add Claude Opus 4.1 model support
+- Upgrade anthropic-sdk-go from v1.4.0 to v1.7.0
+- Fix temperature/topP parameter conflict for models
+- Refactor release workflow to use shared version job and simplify OS handling
+- Improve chat parameter defaults handling with domain constants
+
+## v1.4.273 (2025-08-05)
+
+### Direct commits
+
+- Remove redundant words from codebase
+- Fix typos in t_ patterns
+
+## v1.4.272 (2025-07-28)
+
+### PR [#1658](https://github.com/danielmiessler/Fabric/pull/1658) by [ksylvan](https://github.com/ksylvan): Update Release Process for Data Consistency
+
+- Add database sync before generating changelog in release workflow
+- Ensure changelog generation includes latest database updates
+- Update changelog cache database
+
+## v1.4.271 (2025-07-28)
+
+### PR [#1657](https://github.com/danielmiessler/Fabric/pull/1657) by [ksylvan](https://github.com/ksylvan): Add GitHub Release Description Update Feature
+
+- Add GitHub release description update via `--release` flag
+- Implement `ReleaseManager` for managing release descriptions
+- Create `release.go` for handling release updates
+- Update `release.yml` to run changelog generation
+- Enable AI summary updates for GitHub releases
+
+## v1.4.270 (2025-07-27)
+
+### PR [#1654](https://github.com/danielmiessler/Fabric/pull/1654) by [ksylvan](https://github.com/ksylvan): Refine Output File Handling for Safety
+
+- Fix: prevent file overwrite and improve output messaging in CreateOutputFile
+- Add file existence check before creating output file
+- Return error if target file already exists
+- Change success message to write to stderr
+- Update message format with brackets for clarity
+
+## v1.4.269 (2025-07-26)
+
+### PR [#1653](https://github.com/danielmiessler/Fabric/pull/1653) by [ksylvan](https://github.com/ksylvan): docs: update Gemini TTS model references to gemini-2.5-flash-preview-tts
+
+- Updated Gemini TTS model references from gemini-2.0-flash-tts to gemini-2.5-flash-preview-tts throughout documentation
+- Modified documentation examples to use the new gemini-2.5-flash-preview-tts model
+- Updated voice selection example commands in Gemini-TTS.md
+- Revised CLI help text example commands to reflect model changes
+- Updated changelog database binary file
+
+## v1.4.268 (2025-07-26)
+
+### PR [#1652](https://github.com/danielmiessler/Fabric/pull/1652) by [ksylvan](https://github.com/ksylvan): Implement Voice Selection for Gemini Text-to-Speech
+
+- Feat: add Gemini TTS voice selection and listing functionality
+- Add `--voice` flag for TTS voice selection
+- Add `--list-gemini-voices` command for voice discovery
+- Implement voice validation for Gemini TTS models
+- Update shell completions for voice options
+
+## v1.4.267 (2025-07-26)
+
+### PR [#1650](https://github.com/danielmiessler/Fabric/pull/1650) by [ksylvan](https://github.com/ksylvan): Update Gemini Plugin to New SDK with TTS Support
+
+- Update Gemini SDK to new genai library and add TTS audio output support
+- Replace deprecated generative-ai-go with google.golang.org/genai library
+- Add TTS model detection and audio output validation
+- Implement WAV file generation for TTS audio responses
+- Add audio format checking utilities in CLI output
+
+## v1.4.266 (2025-07-25)
+
+### PR [#1649](https://github.com/danielmiessler/Fabric/pull/1649) by [ksylvan](https://github.com/ksylvan): Fix Conditional API Initialization to Prevent Unnecessary Error Messages
+
+- Prevent unconfigured API initialization and add Docker test suite
+- Add BEDROCK_AWS_REGION requirement for Bedrock initialization
+- Implement IsConfigured check for Ollama API URL
+- Create comprehensive Docker testing environment with 6 scenarios
+- Add interactive test runner with shell access
+
+## v1.4.265 (2025-07-25)
+
+### PR [#1647](https://github.com/danielmiessler/Fabric/pull/1647) by [ksylvan](https://github.com/ksylvan): Simplify Workflow with Single Version Retrieval Step
+
+- Replace git tag lookup with version.nix file reading for release workflow
+- Remove OS-specific git tag retrieval steps and add unified version extraction from nix file
+- Include version format validation with regex check
+- Add error handling for missing version file
+- Consolidate cross-platform version logic into single step with bash shell for consistent version parsing
+
+## v1.4.264 (2025-07-22)
+
+### PR [#1642](https://github.com/danielmiessler/Fabric/pull/1642) by [ksylvan](https://github.com/ksylvan): Add --sync-db to `generate_changelog`, plus many fixes
+
+- Add database synchronization command with comprehensive validation and sync-db flag for database integrity validation
+- Implement version and commit existence checking methods with enhanced time parsing using RFC3339Nano fallback support
+- Improve timestamp handling and merge commit detection in changelog generator with comprehensive merge commit detection using parents
+- Add email field support to PRCommit struct for author information and improve error logging throughout changelog generation
+- Optimize merge pattern matching with lazy initialization and thread-safe pattern compilation for better performance
+
+### Direct commits
+
+- Chore: incoming 1642 changelog entry
+- Fix: improve error message formatting in version date parsing
+
+- Add actual error details to date parsing failure message
+
+- Include error variable in stderr output formatting
+- Enhance debugging information for invalid date formats
+- Docs: Update CHANGELOG after v1.4.263
+
+## v1.4.263 (2025-07-21)
+
+### PR [#1641](https://github.com/danielmiessler/Fabric/pull/1641) by [ksylvan](https://github.com/ksylvan): Fix Fabric Web timeout error
+
+- Chore: extend proxy timeout in `vite.config.ts` to 15 minutes
+- Increase `/api` proxy timeout to 900,000 ms
+- Increase `/names` proxy timeout to 900,000 ms
+
+## v1.4.262 (2025-07-21)
+
+### PR [#1640](https://github.com/danielmiessler/Fabric/pull/1640) by [ksylvan](https://github.com/ksylvan): Implement Automated Changelog System for CI/CD Integration
+
+- Add automated changelog processing for CI/CD integration with comprehensive test coverage and GitHub client validation methods
+- Implement release aggregation for incoming files with git operations for staging changes and support for version detection from nix files
+- Change push behavior from opt-out to opt-in with GitHub token authentication and automatic repository detection
+- Enhance changelog generation to avoid duplicate commit entries by extracting PR numbers and filtering commits already included via PR files
+- Add version parameter requirement for PR processing with commit SHA tracking to prevent duplicate entries and improve formatting consistency
+
+### Direct commits
+
+- Docs: Update CHANGELOG after v1.4.261
+
 ## v1.4.261 (2025-07-19)
 
 ### PR [#1637](https://github.com/danielmiessler/Fabric/pull/1637) by [ksylvan](https://github.com/ksylvan): chore: update `NeedsRawMode` to include `mistral` prefix for Ollama
