@@ -192,9 +192,7 @@ func (o *Chatter) BuildSession(request *domain.ChatRequest, raw bool) (session *
 	if request.PatternName != "" {
 		var pattern *fsdb.Pattern
 
-		if request.NoVariableReplacement {
-			pattern, err = o.db.Patterns.GetApplyVariables(request.PatternName, request.PatternVariables, "Specific User Request: "+request.Message.Content+"\n")
-		}
+		pattern, err = o.db.Patterns.GetApplyVariables(request.PatternName, request.PatternVariables, "Specific User Request: "+request.Message.Content+"\n")
 
 		if err != nil {
 			return nil, fmt.Errorf("could not get pattern %s: %v", request.PatternName, err)
