@@ -3,9 +3,7 @@ package restapi
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/danielmiessler/fabric/internal/chat"
-	"github.com/danielmiessler/fabric/internal/util"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -15,10 +13,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/danielmiessler/fabric/internal/chat"
 	"github.com/danielmiessler/fabric/internal/core"
 	"github.com/danielmiessler/fabric/internal/domain"
 	"github.com/danielmiessler/fabric/internal/plugins/db/fsdb"
+	"github.com/danielmiessler/fabric/internal/util"
 	"github.com/gin-gonic/gin"
+)
+
+var (
+	urlRegex  = regexp.MustCompile(`https?://[^\s]+`)
+	dateRegex = regexp.MustCompile(`\b(\d{4}-\d{2}-\d{2})\b`)
 )
 
 type ChatHandler struct {
@@ -65,30 +70,39 @@ func NewChatHandler(r *gin.Engine, registry *core.PluginRegistry, db *fsdb.Db) *
 
 // DeletePattern deletes a pattern file from FABRIC_CONFIG_HOME/patterns
 func (h *ChatHandler) DeletePattern(c *gin.Context) {
-
+	log.Printf("[DEBUG] Entering DeletePattern handler")
 	name := c.Param("name")
+	log.Printf("[DEBUG] Pattern name to delete: %s", name)
 
 	fabricPatternPath := os.Getenv("FABRIC_PATTERN_PATH")
 	if fabricPatternPath == "" {
+		log.Printf("[ERROR] FABRIC_PATTERN_PATH not set")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "FABRIC_PATTERN_PATH not set"})
 		return
 	}
+	log.Printf("[DEBUG] FABRIC_PATTERN_PATH: %s", fabricPatternPath)
 	target := filepath.Join(fabricPatternPath, name)
+	log.Printf("[DEBUG] Attempting to delete target: %s", target)
+
 	// Attempt to remove the file or directory
 	err := os.RemoveAll(target)
 	if err != nil {
 		if os.IsNotExist(err) {
+			log.Printf("[WARNING] Pattern not found: %s", name)
 			c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Pattern not found: %s", name)})
 			return
 		}
+		log.Printf("[ERROR] Error deleting pattern %s: %v", name, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error deleting pattern: %v", err)})
 		return
 	}
 	log.Printf("Deleted pattern: %s", target)
 	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Pattern %s deleted successfully", name)})
+	log.Printf("[DEBUG] Exiting DeletePattern handler")
 }
 
 func (h *ChatHandler) HandleChat(c *gin.Context) {
+	log.Printf("[DEBUG] Entering HandleChat handler")
 	var request ChatRequest
 
 	if err := c.BindJSON(&request); err != nil {
@@ -97,15 +111,18 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid request format: %v", err)})
 		return
 	}
+	log.Printf("[DEBUG] Chat request bound successfully: %+v", request)
 
 	fabricHome := os.Getenv("FABRIC_CONFIG_HOME")
 	if fabricHome == "" {
 		log.Printf("FABRIC_CONFIG_HOME not set, skipping context file write")
 	} else {
+		log.Printf("[DEBUG] FABRIC_CONFIG_HOME is set to: %s", fabricHome)
 		contextDir := filepath.Join(fabricHome, "contexts")
 		if err := os.MkdirAll(contextDir, 0755); err != nil {
 			log.Printf("Error creating context directory %s: %v", contextDir, err)
 		} else {
+			log.Printf("[DEBUG] Context directory ensured: %s", contextDir)
 			var patternSet = make(map[string]bool)
 			for _, p := range request.Prompts {
 				if p.PatternName != "" {
@@ -117,14 +134,16 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 				patternNamesSlice = append(patternNamesSlice, name)
 			}
 			patternNames := strings.Join(patternNamesSlice, ", ")
+			log.Printf("[DEBUG] Pattern names for context: %s", patternNames)
 			now := time.Now()
 			personalName := os.Getenv("PERSONAL_NAME")
 			if personalName == "" {
 				personalName = "Fritz"
 			}
+			log.Printf("[DEBUG] Personal name for context: %s", personalName)
 			filename := filepath.Join(contextDir, "general_context.md")
 			content := fmt.Sprintf("# CONTEXT\n - User name: %s\n - The Current Date is: %s\n - Pattern name(s): %s\n\n", personalName, now.Format("2006-01-02"), patternNames)
-			if err := ioutil.WriteFile(filename, []byte(content), 0644); err != nil {
+			if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
 				log.Printf("Error writing context file %s: %v", filename, err)
 			} else {
 				log.Printf("Wrote context file: %s", filename)
@@ -136,6 +155,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 	log.Printf("Received chat request - Language: '%s', Prompts: %d", request.Language, len(request.Prompts))
 
 	// Set headers for SSE
+	log.Printf("[DEBUG] Setting SSE headers")
 	c.Writer.Header().Set("Content-Type", "text/readystream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
 	c.Writer.Header().Set("Connection", "keep-alive")
@@ -156,16 +176,19 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 			streamChan := make(chan string)
 
 			go func(p PromptRequest) {
+				log.Printf("[DEBUG] Goroutine started for prompt: %+v", p)
 				defer close(streamChan)
 
 				// fetch and embed web links and RSS feeds, limit total size
-				urlRegex := regexp.MustCompile(`https?://[^\s]+`)
 				links := urlRegex.FindAllString(p.UserInput, -1)
+				log.Printf("[DEBUG] Found %d links in user input: %v", len(links), links)
 				totalLinkChars := 0
 				const maxLinkChars = 500000
 				for _, link := range links {
+					log.Printf("[DEBUG] Processing link: %s", link)
 					// detect RSS or XML feed links
 					if strings.HasSuffix(link, ".rss") || strings.HasSuffix(link, ".xml") || strings.HasSuffix(link, ".xml#") {
+						log.Printf("[DEBUG] Detected RSS/XML feed: %s", link)
 						md, err := util.ConvertRSSFeedToMarkdown(link)
 						if totalLinkChars+len(md) > maxLinkChars {
 							log.Printf("Skipping URL %s: would exceed accumulated content limit", link)
@@ -176,7 +199,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 							log.Printf("Error converting RSS feed %s: %v", link, err)
 						} else {
 							p.UserInput = p.UserInput + "\nRSS Feed Markdown:\n" + md
-							log.Printf("Added RSS feed markdown for: %s", link)
+							log.Printf("Added RSS feed markdown for: %s. Total link chars: %d", link, totalLinkChars)
 						}
 						continue
 					}
@@ -186,10 +209,10 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 					}
 					resp, err := http.Get(link)
 					if err != nil {
-						log.Printf("Error fetching URL %s: %v", link, err)
+						log.Printf("Error fetching URRL %s: %v", link, err)
 						continue
 					}
-					body, err := ioutil.ReadAll(resp.Body)
+					body, err := io.ReadAll(resp.Body)
 					resp.Body.Close()
 					if err != nil {
 						log.Printf("Error reading response from URL %s: %v", link, err)
@@ -203,11 +226,12 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 					content := "URL: " + link + "\n" + text
 					p.UserInput = p.UserInput + "\nURL Content:\n" + content
 					totalLinkChars += len(text)
-					log.Printf("Added content from URL: %s", link)
+					log.Printf("Added content from URL: %s. Total link chars: %d", link, totalLinkChars)
 				}
 
 				var obsidianFilePath string
 				if p.ObsidianFile != "" {
+					log.Printf("[DEBUG] Processing ObsidianFile: %s", p.ObsidianFile)
 					// gather all vault paths from env vars
 					type vaultInfo struct {
 						path string
@@ -223,6 +247,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 							idxStr := keyParts[len(keyParts)-1]
 							idx, err := strconv.Atoi(idxStr)
 							if err != nil {
+								log.Printf("[DEBUG] Skipping invalid vault path env var key: %s", key)
 								continue
 							}
 							suffix := ""
@@ -232,6 +257,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 								suffix = val[j+1:]
 							}
 							vaultEnv[suffix] = vaultInfo{path: prefix, idx: idx}
+							log.Printf("[DEBUG] Found Obsidian vault env: key=%s, path=%s, index=%d, suffix=%s", key, prefix, idx, suffix)
 						}
 					}
 					// determine suffix and relative file path
@@ -239,10 +265,15 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 					vaultIdx := 0
 					if parts := strings.SplitN(obsFile, "/", 2); len(parts) == 2 {
 						if vinfo, ok := vaultEnv[parts[0]]; ok {
+							log.Printf("[DEBUG] Found matching vault for suffix '%s': %+v", parts[0], vinfo)
 							candidate := filepath.Join(vinfo.path, obsFile)
+							log.Printf("[DEBUG] Checking candidate path: %s", candidate)
 							if _, err := os.Stat(candidate); err == nil {
 								obsidianFilePath = candidate
 								vaultIdx = vinfo.idx
+								log.Printf("[DEBUG] Confirmed Obsidian file path: %s, vault index: %d", obsidianFilePath, vaultIdx)
+							} else {
+								log.Printf("[DEBUG] Candidate path does not exist: %s", candidate)
 							}
 						}
 					}
@@ -256,21 +287,26 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 							specialInstruction := ""
 							if vaultIdx >= 2 {
 								specialInstruction = " - Add User Name next to any change to Journal File, e.g. Bought a new plant today (User Name)."
+								log.Printf("[DEBUG] Added special instruction for high-index vault.")
 							}
 							p.UserInput = p.UserInput + "\n" + specialInstruction + "\nJournal File:\n" + fileContentAmended
 							log.Printf("Added content from obsidian file: %s", obsidianFilePath)
 						} else {
 							log.Printf("Error reading obsidian file %s: %v", obsidianFilePath, err)
 						}
+					} else {
+						log.Printf("[DEBUG] Obsidian file path could not be resolved for: %s", p.ObsidianFile)
 					}
 				}
 
+				log.Printf("[DEBUG] Attempting to get chatter for model: %s, vendor: %s", p.Model, p.Vendor)
 				chatter, err := h.registry.GetChatter(p.Model, 2048, p.Vendor, "", false, false)
 				if err != nil {
 					log.Printf("Error creating chatter: %v", err)
 					streamChan <- fmt.Sprintf("Error: %v", err)
 					return
 				}
+				log.Printf("[DEBUG] Chatter created successfully.")
 
 				// Pass the language received in the initial request to the domain.ChatRequest
 				chatReq := &domain.ChatRequest{
@@ -283,6 +319,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 					PatternVariables: p.Variables, // Pass pattern variables
 					Language:         request.Language,
 					SessionName:      p.SessionName}
+				log.Printf("[DEBUG] Constructed domain.ChatRequest: %+v", chatReq)
 
 				opts := &domain.ChatOptions{
 					Model:            p.Model,
@@ -292,6 +329,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 					PresencePenalty:  request.PresencePenalty,
 					Thinking:         request.Thinking,
 				}
+				log.Printf("[DEBUG] Constructed domain.ChatOptions: %+v", opts)
 
 				session, err := chatter.Send(chatReq, opts)
 				if err != nil {
@@ -299,6 +337,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 					streamChan <- fmt.Sprintf("Error: %v", err)
 					return
 				}
+				log.Printf("[DEBUG] Received session from chatter.Send")
 
 				if session == nil {
 					log.Printf("No session returned from chatter.Send")
@@ -308,32 +347,40 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 
 				lastMsg := session.GetLastMessage()
 				if lastMsg != nil {
+					log.Printf("[DEBUG] Got last message from session, sending to stream channel.")
 					streamChan <- lastMsg.Content
 				} else {
 					log.Printf("No message content in session")
 					streamChan <- "Error: No response content"
 				}
+				log.Printf("[DEBUG] Goroutine finished for prompt: %+v", p)
 			}(prompt)
 
 			for content := range streamChan {
 				select {
 				case <-clientGone:
+					log.Printf("[DEBUG] Client disconnected while streaming.")
 					return
 				default:
+					log.Printf("[DEBUG] Received content from stream channel.")
 					var response StreamResponse
 					if strings.HasPrefix(content, "Error:") {
+						log.Printf("[DEBUG] Content is an error: %s", content)
 						response = StreamResponse{
 							Type:    "error",
 							Format:  "plain",
 							Content: content,
 						}
 					} else {
+						detectedFormat := detectFormat(content)
+						log.Printf("[DEBUG] Detected format: %s", detectedFormat)
 						response = StreamResponse{
 							Type:    "content",
-							Format:  detectFormat(content),
+							Format:  detectedFormat,
 							Content: content,
 						}
 					}
+					log.Printf("[DEBUG] Writing SSE response: %+v", response)
 					if err := writeSSEResponse(c.Writer, response); err != nil {
 						log.Printf("Error writing response: %v", err)
 						return
@@ -341,6 +388,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 				}
 			}
 
+			log.Printf("[DEBUG] Stream channel closed. Sending 'complete' response.")
 			completeResponse := StreamResponse{
 				Type:    "complete",
 				Format:  "plain",
@@ -352,25 +400,34 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 			}
 		}
 	}
+	log.Printf("[DEBUG] Exiting HandleChat handler normally.")
 }
 
 func readObsidianFile(path string) (string, error) {
+	log.Printf("[DEBUG] Entering readObsidianFile for path: %s", path)
 	fileContent, err := os.ReadFile(path)
 	if err != nil {
+		log.Printf("[ERROR] Failed to read file %s: %v", path, err)
 		return "", err
 	}
+	log.Printf("[DEBUG] Successfully read %d bytes from %s", len(fileContent), path)
 	contentToUse := string(fileContent)
-	dateRegex := regexp.MustCompile(`\b(\d{4}-\d{2}-\d{2})\b`)
-	monthsBack, err := strconv.Atoi(os.Getenv("JOURNAL_FILE_RETRO_MONTHS"))
+	monthsBackStr := os.Getenv("JOURNAL_FILE_RETRO_MONTHS")
+	log.Printf("[DEBUG] JOURNAL_FILE_RETRO_MONTHS: '%s'", monthsBackStr)
+	monthsBack, err := strconv.Atoi(monthsBackStr)
 	if err != nil {
-		return "", err
+		log.Printf("[ERROR] Invalid JOURNAL_FILE_RETRO_MONTHS value: %v. Returning full file content.", err)
+		return contentToUse, nil // Return full content if env var is invalid
 	}
-	// If the file contains dates, filter it to include only the last three months of entries.
+	log.Printf("[DEBUG] Retro months set to: %d", monthsBack)
+	// If the file contains dates, filter it to include only the last N months of entries.
 	// If no dates are found, the entire file content is used.
 	if dateRegex.MatchString(contentToUse) {
+		log.Printf("[DEBUG] Date regex matched. Filtering content.")
 		var sb strings.Builder
 		lines := strings.Split(contentToUse, "\n")
-		threeMonthsAgo := time.Now().AddDate(0, -monthsBack, 0)
+		cutoffDate := time.Now().AddDate(0, -monthsBack, 0)
+		log.Printf("[DEBUG] Filtering entries after %s", cutoffDate.Format("2006-01-02"))
 		// Content before the first dated entry is included by default.
 		currentSectionIsRecent := true
 
@@ -385,7 +442,8 @@ func readObsidianFile(path string) (string, error) {
 				lineDate, err := time.Parse("2006-01-02", dateStr)
 				if err == nil {
 					isNewSectionHeader = true
-					isNewSectionRecent = !lineDate.Before(threeMonthsAgo)
+					isNewSectionRecent = !lineDate.Before(cutoffDate)
+					log.Printf("[DEBUG] Found date '%s'. Is recent: %t", dateStr, isNewSectionRecent)
 				}
 			}
 
@@ -401,64 +459,86 @@ func readObsidianFile(path string) (string, error) {
 			}
 		}
 		contentToUse = strings.TrimSuffix(sb.String(), "\n")
+		log.Printf("[DEBUG] Filtered content length: %d", len(contentToUse))
+	} else {
+		log.Printf("[DEBUG] No dates found in file, using entire content.")
 	}
+	log.Printf("[DEBUG] Exiting readObsidianFile for path: %s", path)
 	return contentToUse, nil
 }
 
 func (h *ChatHandler) StoreLast(c *gin.Context) {
+	log.Printf("[DEBUG] Entering StoreLast handler")
 	var req struct {
 		SessionName string `json:"sessionName"`
 	}
 	if err := c.BindJSON(&req); err != nil {
+		log.Printf("[ERROR] StoreLast: Error binding JSON: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	log.Printf("[DEBUG] StoreLast request: %+v", req)
 	if req.SessionName == "" {
+		log.Printf("[ERROR] StoreLast: sessionName is required")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "sessionName is required"})
 		return
 	}
 	fabricHome := os.Getenv("FABRIC_CONFIG_HOME")
 	if fabricHome == "" {
+		log.Printf("[ERROR] StoreLast: FABRIC_CONFIG_HOME not set")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "FABRIC_CONFIG_HOME not set"})
 		return
 	}
 	sessionsDir := filepath.Join(fabricHome, "sessions")
-	data, err := ioutil.ReadFile(filepath.Join(sessionsDir, req.SessionName+".json"))
+	sessionFile := filepath.Join(sessionsDir, req.SessionName+".json")
+	log.Printf("[DEBUG] Reading session file: %s", sessionFile)
+	data, err := os.ReadFile(sessionFile)
 	if err != nil {
+		log.Printf("[ERROR] StoreLast: Error reading session file: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error reading session file: %v", err)})
 		return
 	}
+	log.Printf("[DEBUG] Read %d bytes from session file", len(data))
 	var msgs []struct {
 		Role    string `json:"role"`
 		Content string `json:"content"`
 	}
 	if err := json.Unmarshal(data, &msgs); err != nil {
+		log.Printf("[ERROR] StoreLast: Error parsing session JSON: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error parsing session JSON: %v", err)})
 		return
 	}
+	log.Printf("[DEBUG] Parsed %d messages from session", len(msgs))
 	var assistantContent string
 	for i := len(msgs) - 1; i >= 0; i-- {
 		if msgs[i].Role == "assistant" {
 			assistantContent = msgs[i].Content
+			log.Printf("[DEBUG] Found last assistant message.")
 			break
 		}
 	}
 	if assistantContent == "" {
+		log.Printf("[WARNING] StoreLast: no assistant message found in session")
 		c.JSON(http.StatusNotFound, gin.H{"error": "no assistant message found in session"})
 		return
 	}
 	parsed := parseFilenameBlocks(assistantContent)
+	log.Printf("[DEBUG] Parsed %d filename blocks from assistant content", len(parsed))
 	var savedFilenames []string
 	if len(parsed) > 0 {
 		for filename, content := range parsed {
+			log.Printf("[DEBUG] Storing content to filename: %s", filename)
 			dir := filepath.Dir(filename)
 			if dir != "" && dir != "." {
+				log.Printf("[DEBUG] Creating directory: %s", dir)
 				if err := os.MkdirAll(dir, 0755); err != nil {
+					log.Printf("[ERROR] StoreLast: Error creating directory %s: %v", dir, err)
 					c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error creating directory: %v", err)})
 					return
 				}
 			}
-			if err := ioutil.WriteFile(filename, []byte(content), 0644); err != nil {
+			if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
+				log.Printf("[ERROR] StoreLast: Error writing file %s: %v", filename, err)
 				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error writing file %s: %v", filename, err)})
 				return
 			}
@@ -470,36 +550,47 @@ func (h *ChatHandler) StoreLast(c *gin.Context) {
 			"filenames": savedFilenames,
 		})
 	} else {
+		log.Printf("[DEBUG] No FILENAME markers found in last assistant message.")
 		c.JSON(http.StatusOK, gin.H{
 			"message": "No FILENAME markers found; nothing stored",
 		})
 	}
+	log.Printf("[DEBUG] Exiting StoreLast handler")
 }
 
 func (h *ChatHandler) StoreMessage(c *gin.Context) {
+	log.Printf("[DEBUG] Entering StoreMessage handler")
 	var req struct {
 		Prompt string `json:"prompt"`
 	}
 	if err := c.BindJSON(&req); err != nil {
+		log.Printf("[ERROR] StoreMessage: Error binding JSON: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	log.Printf("[DEBUG] StoreMessage request received.")
 	if req.Prompt == "" {
+		log.Printf("[ERROR] StoreMessage: prompt is required")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "prompt is required"})
 		return
 	}
 	parsed := parseFilenameBlocks(req.Prompt)
+	log.Printf("[DEBUG] Parsed %d filename blocks from prompt", len(parsed))
 	var savedFilenames []string
 	if len(parsed) > 0 {
 		for filename, content := range parsed {
+			log.Printf("[DEBUG] Storing content to filename: %s", filename)
 			dir := filepath.Dir(filename)
 			if dir != "" && dir != "." {
+				log.Printf("[DEBUG] Creating directory: %s", dir)
 				if err := os.MkdirAll(dir, 0755); err != nil {
+					log.Printf("[ERROR] StoreMessage: Error creating directory %s: %v", dir, err)
 					c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error creating directory: %v", err)})
 					return
 				}
 			}
-			if err := ioutil.WriteFile(filename, []byte(content), 0644); err != nil {
+			if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
+				log.Printf("[ERROR] StoreMessage: Error writing file %s: %v", filename, err)
 				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error writing file %s: %v", filename, err)})
 				return
 			}
@@ -511,13 +602,16 @@ func (h *ChatHandler) StoreMessage(c *gin.Context) {
 			"filenames": savedFilenames,
 		})
 	} else {
+		log.Printf("[DEBUG] No FILENAME markers found in prompt.")
 		c.JSON(http.StatusOK, gin.H{
 			"message": "No FILENAME markers found; nothing stored",
 		})
 	}
+	log.Printf("[DEBUG] Exiting StoreMessage handler")
 }
 
 func parseFilenameBlocks(input string) map[string]string {
+	log.Printf("[DEBUG] Entering parseFilenameBlocks. Input length: %d", len(input))
 	blocks := make(map[string]string)
 	lines := strings.Split(input, "\n")
 	var current string
@@ -526,9 +620,11 @@ func parseFilenameBlocks(input string) map[string]string {
 		if strings.HasPrefix(l, "FILENAME:") {
 			if current != "" {
 				blocks[current] = strings.Join(buf, "\n")
+				log.Printf("[DEBUG] Stored block for FILENAME: %s", current)
 				buf = nil
 			}
 			current = strings.TrimSpace(strings.TrimPrefix(l, "FILENAME:"))
+			log.Printf("[DEBUG] Found new FILENAME: %s", current)
 		} else {
 			if current != "" {
 				buf = append(buf, l)
@@ -537,32 +633,42 @@ func parseFilenameBlocks(input string) map[string]string {
 	}
 	if current != "" {
 		blocks[current] = strings.Join(buf, "\n")
+		log.Printf("[DEBUG] Stored final block for FILENAME: %s", current)
 	}
+	log.Printf("[DEBUG] Exiting parseFilenameBlocks. Found %d blocks.", len(blocks))
 	return blocks
 }
 
 func writeSSEResponse(w gin.ResponseWriter, response StreamResponse) error {
+	log.Printf("[DEBUG] Entering writeSSEResponse for type: %s", response.Type)
 	data, err := json.Marshal(response)
 	if err != nil {
+		log.Printf("[ERROR] Error marshaling SSE response: %v", err)
 		return fmt.Errorf("error marshaling response: %v", err)
 	}
+	log.Printf("[DEBUG] Marshaled SSE data: %s", string(data))
 
 	if _, err := fmt.Fprintf(w, "data: %s\n\n", string(data)); err != nil {
+		log.Printf("[ERROR] Error writing SSE response to client: %v", err)
 		return fmt.Errorf("error writing response: %v", err)
 	}
 
 	w.(http.Flusher).Flush()
+	log.Printf("[DEBUG] Flushed SSE response.")
 	return nil
 }
 
 func detectFormat(content string) string {
+	log.Printf("[DEBUG] Entering detectFormat")
 	if strings.HasPrefix(content, "graph TD") ||
 		strings.HasPrefix(content, "gantt") ||
 		strings.HasPrefix(content, "flowchart") ||
 		strings.HasPrefix(content, "sequenceDiagram") ||
 		strings.HasPrefix(content, "classDiagram") ||
 		strings.HasPrefix(content, "stateDiagram") {
+		log.Printf("[DEBUG] Detected 'mermaid' format.")
 		return "mermaid"
 	}
+	log.Printf("[DEBUG] Defaulting to 'markdown' format.")
 	return "markdown"
 }
