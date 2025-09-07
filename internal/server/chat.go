@@ -46,7 +46,7 @@ type PromptRequest struct {
 type ChatRequest struct {
 	Prompts            []PromptRequest `json:"prompts"`
 	Language           string          `json:"language"` // Add Language field to bind from request
-	domain.ChatOptions                 // Embed the ChatOptions from common package
+	domain.ChatOptions                                   // Embed the ChatOptions from common package
 }
 
 type StreamResponse struct {
@@ -283,13 +283,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 						if err == nil {
 							// include actual newlines so parseFilenameBlocks can detect FILENAME
 							fileContentAmended := "FILENAME: " + obsidianFilePath + "\n" + contentToUse
-							// Add username next to new entry for vault paths 2 or higher
-							specialInstruction := ""
-							if vaultIdx >= 2 {
-								specialInstruction = " - Add User Name next to any change to Journal File, e.g. Bought a new plant today (User Name)."
-								log.Printf("[DEBUG] Added special instruction for high-index vault.")
-							}
-							p.UserInput = p.UserInput + "\n" + specialInstruction + "\nJournal File:\n" + fileContentAmended
+							p.UserInput = p.UserInput + "\nJournal File:\n" + fileContentAmended
 							log.Printf("Added content from obsidian file: %s", obsidianFilePath)
 						} else {
 							log.Printf("Error reading obsidian file %s: %v", obsidianFilePath, err)
