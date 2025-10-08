@@ -3,10 +3,11 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/danielmiessler/fabric/internal/core"
+	"github.com/danielmiessler/fabric/internal/i18n"
+	debuglog "github.com/danielmiessler/fabric/internal/log"
 	"github.com/danielmiessler/fabric/internal/plugins/ai/openai"
 	"github.com/danielmiessler/fabric/internal/tools/converter"
 	"github.com/danielmiessler/fabric/internal/tools/youtube"
@@ -16,6 +17,11 @@ import (
 func Cli(version string) (err error) {
 	var currentFlags *Flags
 	if currentFlags, err = Init(); err != nil {
+		return
+	}
+
+	// initialize internationalization using requested language
+	if _, err = i18n.Init(currentFlags.Language); err != nil {
 		return
 	}
 
@@ -34,7 +40,7 @@ func Cli(version string) (err error) {
 	var registry, err2 = initializeFabric()
 	if err2 != nil {
 		if !currentFlags.Setup {
-			fmt.Fprintln(os.Stderr, err2.Error())
+			debuglog.Log("%s\n", err2.Error())
 			currentFlags.Setup = true
 		}
 		// Return early if registry is nil to prevent panics in subsequent handlers
@@ -86,7 +92,7 @@ func Cli(version string) (err error) {
 	// Process HTML readability if needed
 	if currentFlags.HtmlReadability {
 		if msg, cleanErr := converter.HtmlReadability(currentFlags.Message); cleanErr != nil {
-			fmt.Println("use original input, because can't apply html readability", cleanErr)
+			fmt.Println(i18n.T("html_readability_error"), cleanErr)
 		} else {
 			currentFlags.Message = msg
 		}
