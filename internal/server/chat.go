@@ -85,7 +85,6 @@ func (h *ChatHandler) DeletePattern(c *gin.Context) {
 	target := filepath.Join(fabricPatternPath, name)
 	log.Printf("[DEBUG] Attempting to delete target: %s", target)
 
-	// Attempt to remove the file or directory
 	err := os.RemoveAll(target)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -152,10 +151,8 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 		}
 	}
 
-	// Add log to check received language field
 	log.Printf("Received chat request - Language: '%s', Prompts: %d", request.Language, len(request.Prompts))
 
-	// Set headers for SSE
 	log.Printf("[DEBUG] Setting SSE headers")
 	c.Writer.Header().Set("Content-Type", "text/readystream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
@@ -180,14 +177,12 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 				log.Printf("[DEBUG] Goroutine started for prompt: %+v", p)
 				defer close(streamChan)
 
-				// fetch and embed web links and RSS feeds, limit total size
 				links := urlRegex.FindAllString(p.UserInput, -1)
 				log.Printf("[DEBUG] Found %d links in user input: %v", len(links), links)
 				totalLinkChars := 0
 				const maxLinkChars = 500000
 				for _, link := range links {
 					log.Printf("[DEBUG] Processing link: %s", link)
-					// detect RSS or XML feed links
 					if strings.HasSuffix(link, ".rss") || strings.HasSuffix(link, ".xml") || strings.HasSuffix(link, ".xml#") {
 						log.Printf("[DEBUG] Detected RSS/XML feed: %s", link)
 						md, err := util.ConvertRSSFeedToMarkdown(link)
@@ -235,13 +230,13 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 					log.Printf("[DEBUG] Processing ObsidianFile: %s", p.ObsidianFile)
 					if p.ObsidianFile == "weaviate" {
 						log.Printf("[DEBUG] Detected weaviate journal spec: %s", p.ObsidianFile)
-						contentToUse, err := readWeaviateJournal(p.UserInput, p.ObsidianFile)
+						path, contentToUse, err := readWeaviateJournal(p.UserInput, p.ObsidianFile)
 						if err == nil {
-							fileContentAmended := "FILENAME: weaviate\n" + contentToUse
-							p.UserInput = p.UserInput + "\nJournal File (Weaviate):\n" + fileContentAmended
-							log.Printf("Added content from weaviate spec: %s", p.ObsidianFile)
+							fileContentAmended := "FILENAME: " + path + "\n" + contentToUse
+							p.UserInput = p.UserInput + "\nJournal File:\n" + fileContentAmended
+							log.Printf("[INFO] Added content from weaviate spec: %s (path: %s)", p.ObsidianFile, path)
 						} else {
-							log.Printf("Error fetching weaviate journal for %s: %v", p.ObsidianFile, err)
+							log.Printf("[ERROR] Error fetching weaviate journal for %s: %v", p.ObsidianFile, err)
 						}
 					} else {
 						type vaultInfo struct {
@@ -312,7 +307,6 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 				}
 				log.Printf("[DEBUG] Chatter created successfully.")
 
-				// Pass the language received in the initial request to the domain.ChatRequest
 				chatReq := &domain.ChatRequest{
 					Message: &chat.ChatCompletionMessage{
 						Role:    "user",
@@ -421,25 +415,21 @@ func readObsidianFile(path string) (string, error) {
 	monthsBack, err := strconv.Atoi(monthsBackStr)
 	if err != nil {
 		log.Printf("[ERROR] Invalid JOURNAL_FILE_RETRO_MONTHS value: %v. Returning full file content.", err)
-		return contentToUse, nil // Return full content if env var is invalid
+		return contentToUse, nil
 	}
 	log.Printf("[DEBUG] Retro months set to: %d", monthsBack)
-	// If the file contains dates, filter it to include only the last N months of entries.
-	// If no dates are found, the entire file content is used.
 	if dateRegex.MatchString(contentToUse) {
 		log.Printf("[DEBUG] Date regex matched. Filtering content.")
 		var sb strings.Builder
 		lines := strings.Split(contentToUse, "\n")
 		cutoffDate := time.Now().AddDate(0, -monthsBack, 0)
 		log.Printf("[DEBUG] Filtering entries after %s", cutoffDate.Format("2006-01-02"))
-		// Content before the first dated entry is included by default.
 		currentSectionIsRecent := true
 
 		for _, line := range lines {
 			isNewSectionHeader := false
 			isNewSectionRecent := false
 
-			// Check if the line contains a date and marks a new section.
 			matches := dateRegex.FindStringSubmatch(line)
 			if len(matches) > 1 {
 				dateStr := matches[1]
@@ -451,12 +441,10 @@ func readObsidianFile(path string) (string, error) {
 				}
 			}
 
-			// If a new dated section starts, update whether we should include content.
 			if isNewSectionHeader {
 				currentSectionIsRecent = isNewSectionRecent
 			}
 
-			// Append the line if it's part of a recent section.
 			if currentSectionIsRecent {
 				sb.WriteString(line)
 				sb.WriteString("\n")
@@ -471,94 +459,88 @@ func readObsidianFile(path string) (string, error) {
 	return contentToUse, nil
 }
 
-func readWeaviateJournal(prompt string, spec string) (string, error) {
+func readWeaviateJournal(prompt string, spec string) (string, string, error) {
 	log.Printf("[DEBUG] Entering readWeaviateJournal. Spec: %s", spec)
 	endpoint := os.Getenv("WEAVIATE_URL")
+	certainty := os.Getenv("WEAVIATE_CERTAINTY")
+	className := os.Getenv("WEAVIATE_CLASS")
 	if endpoint == "" {
-		return "", fmt.Errorf("WEAVIATE_URL not set")
+		return "", "", fmt.Errorf("WEAVIATE_URL not set")
 	}
+	if className == "" {
+		return "", "", fmt.Errorf("WEAVIATE_CLASS not set")
+	}
+	endpoint = strings.TrimRight(endpoint, "/") + "/v1/graphql"
+	escapedPrompt := strings.ReplaceAll(prompt, `"`, `\"`)
+	query := fmt.Sprintf(`{ Get { %s(limit: 1, nearText: {concepts: ["%s"], certainty:%s}) { path content } } }`, className, escapedPrompt, certainty)
 	payload := map[string]string{
-		"prompt": prompt,
-		"spec":   spec,
+		"query": query,
 	}
 	bs, err := json.Marshal(payload)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	req, err := http.NewRequest("POST", endpoint, bytes.NewReader(bs))
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	client := &http.Client{Timeout: 20 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	if resp.StatusCode >= 400 {
-		return "", fmt.Errorf("weaviate returned status %d: %s", resp.StatusCode, string(body))
+		return "", "", fmt.Errorf("weaviate returned status %d: %s", resp.StatusCode, string(body))
 	}
 	var parsed any
+	path := ""
+	content := ""
 	if err := json.Unmarshal(body, &parsed); err == nil {
 		if m, ok := parsed.(map[string]any); ok {
-			if d, ok := m["data"]; ok {
-				switch v := d.(type) {
-				case string:
-					return v, nil
-				case []any:
-					var sb strings.Builder
-					for _, item := range v {
-						switch it := item.(type) {
-						case string:
-							sb.WriteString(it)
-							sb.WriteString("\n")
-						case map[string]any:
-							if t, ok := it["text"].(string); ok {
-								sb.WriteString(t)
-								sb.WriteString("\n")
-							}
-						}
+			if errs, ok := m["errors"]; ok {
+				if arr, ok := errs.([]any); ok && len(arr) > 0 {
+					var sbErr strings.Builder
+					for _, e := range arr {
+						b, _ := json.Marshal(e)
+						sbErr.Write(b)
+						sbErr.WriteString("\n")
 					}
-					out := strings.TrimSpace(sb.String())
-					if out != "" {
-						return out, nil
-					}
+					return "", "", fmt.Errorf("weaviate graphql errors: %s", strings.TrimSpace(sbErr.String()))
 				}
 			}
-			if r, ok := m["result"]; ok {
-				if s, ok := r.(string); ok {
-					return s, nil
-				}
+			data, ok := m["data"].(map[string]any)
+			if !ok {
+				return "weaviate", "", fmt.Errorf("Data missing from output: " + string(body))
 			}
-			if r, ok := m["results"]; ok {
-				if arr, ok := r.([]any); ok {
-					var sb strings.Builder
+			get, ok := data["Get"].(map[string]any)
+			if !ok {
+				return "weaviate", "", fmt.Errorf("Get missing from output: " + string(body))
+			}
+			if resultsRaw, ok := get[className]; ok {
+				if arr, ok := resultsRaw.([]any); ok {
 					for _, item := range arr {
-						switch it := item.(type) {
-						case string:
-							sb.WriteString(it)
-							sb.WriteString("\n")
-						case map[string]any:
-							if t, ok := it["text"].(string); ok {
-								sb.WriteString(t)
-								sb.WriteString("\n")
+						if itm, ok := item.(map[string]any); ok {
+							if v, ok := itm["path"]; ok {
+								path = v.(string)
+							}
+							if v, ok := itm["content"]; ok {
+								content = v.(string)
 							}
 						}
-					}
-					out := strings.TrimSpace(sb.String())
-					if out != "" {
-						return out, nil
 					}
 				}
 			}
 		}
+	} else {
+		return "", "", err
 	}
-	return string(body), nil
+	return path, content, nil
 }
 
 func (h *ChatHandler) StoreLast(c *gin.Context) {
