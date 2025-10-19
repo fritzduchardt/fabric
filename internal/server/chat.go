@@ -1,6 +1,7 @@
 package restapi
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -142,7 +143,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 			}
 			log.Printf("[DEBUG] Personal name for context: %s", personalName)
 			filename := filepath.Join(contextDir, "general_context.md")
-			content := fmt.Sprintf("# CONTEXT\n - User name: %s\n - The Current Date is: %s\n - Pattern name(s): %s\n\n", personalName, now.Format("2006-01-02"), patternNames)
+			content := fmt.Sprintf("# CONTEXT\n - User name: %s\n - The Current Date is: %s\n - Pattern name(s): %s\n - This is not a chat\n", personalName, now.Format("2006-01-02"), patternNames)
 			if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
 				log.Printf("Error writing context file %s: %v", filename, err)
 			} else {
@@ -232,64 +233,73 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 				var obsidianFilePath string
 				if p.ObsidianFile != "" {
 					log.Printf("[DEBUG] Processing ObsidianFile: %s", p.ObsidianFile)
-					// gather all vault paths from env vars
-					type vaultInfo struct {
-						path string
-						idx  int
-					}
-					vaultEnv := make(map[string]vaultInfo)
-					for _, ev := range os.Environ() {
-						if strings.HasPrefix(ev, "OBSIDIAN_VAULT_PATH_") {
-							partsEnv := strings.SplitN(ev, "=", 2)
-							key := partsEnv[0]
-							val := partsEnv[1]
-							keyParts := strings.Split(key, "_")
-							idxStr := keyParts[len(keyParts)-1]
-							idx, err := strconv.Atoi(idxStr)
-							if err != nil {
-								log.Printf("[DEBUG] Skipping invalid vault path env var key: %s", key)
-								continue
-							}
-							suffix := ""
-							prefix := ""
-							if j := strings.LastIndex(val, "/"); j >= 0 {
-								prefix = val[:j]
-								suffix = val[j+1:]
-							}
-							vaultEnv[suffix] = vaultInfo{path: prefix, idx: idx}
-							log.Printf("[DEBUG] Found Obsidian vault env: key=%s, path=%s, index=%d, suffix=%s", key, prefix, idx, suffix)
-						}
-					}
-					// determine suffix and relative file path
-					obsFile := p.ObsidianFile
-					vaultIdx := 0
-					if parts := strings.SplitN(obsFile, "/", 2); len(parts) == 2 {
-						if vinfo, ok := vaultEnv[parts[0]]; ok {
-							log.Printf("[DEBUG] Found matching vault for suffix '%s': %+v", parts[0], vinfo)
-							candidate := filepath.Join(vinfo.path, obsFile)
-							log.Printf("[DEBUG] Checking candidate path: %s", candidate)
-							if _, err := os.Stat(candidate); err == nil {
-								obsidianFilePath = candidate
-								vaultIdx = vinfo.idx
-								log.Printf("[DEBUG] Confirmed Obsidian file path: %s, vault index: %d", obsidianFilePath, vaultIdx)
-							} else {
-								log.Printf("[DEBUG] Candidate path does not exist: %s", candidate)
-							}
-						}
-					}
-
-					if obsidianFilePath != "" {
-						contentToUse, err := readObsidianFile(obsidianFilePath)
+					if p.ObsidianFile == "weaviate" {
+						log.Printf("[DEBUG] Detected weaviate journal spec: %s", p.ObsidianFile)
+						contentToUse, err := readWeaviateJournal(p.UserInput, p.ObsidianFile)
 						if err == nil {
-							// include actual newlines so parseFilenameBlocks can detect FILENAME
-							fileContentAmended := "FILENAME: " + obsidianFilePath + "\n" + contentToUse
-							p.UserInput = p.UserInput + "\nJournal File:\n" + fileContentAmended
-							log.Printf("Added content from obsidian file: %s", obsidianFilePath)
+							fileContentAmended := "FILENAME: weaviate\n" + contentToUse
+							p.UserInput = p.UserInput + "\nJournal File (Weaviate):\n" + fileContentAmended
+							log.Printf("Added content from weaviate spec: %s", p.ObsidianFile)
 						} else {
-							log.Printf("Error reading obsidian file %s: %v", obsidianFilePath, err)
+							log.Printf("Error fetching weaviate journal for %s: %v", p.ObsidianFile, err)
 						}
 					} else {
-						log.Printf("[DEBUG] Obsidian file path could not be resolved for: %s", p.ObsidianFile)
+						type vaultInfo struct {
+							path string
+							idx  int
+						}
+						vaultEnv := make(map[string]vaultInfo)
+						for _, ev := range os.Environ() {
+							if strings.HasPrefix(ev, "OBSIDIAN_VAULT_PATH_") {
+								partsEnv := strings.SplitN(ev, "=", 2)
+								key := partsEnv[0]
+								val := partsEnv[1]
+								keyParts := strings.Split(key, "_")
+								idxStr := keyParts[len(keyParts)-1]
+								idx, err := strconv.Atoi(idxStr)
+								if err != nil {
+									log.Printf("[DEBUG] Skipping invalid vault path env var key: %s", key)
+									continue
+								}
+								suffix := ""
+								prefix := ""
+								if j := strings.LastIndex(val, "/"); j >= 0 {
+									prefix = val[:j]
+									suffix = val[j+1:]
+								}
+								vaultEnv[suffix] = vaultInfo{path: prefix, idx: idx}
+								log.Printf("[DEBUG] Found Obsidian vault env: key=%s, path=%s, index=%d, suffix=%s", key, prefix, idx, suffix)
+							}
+						}
+						obsFile := p.ObsidianFile
+						vaultIdx := 0
+						if parts := strings.SplitN(obsFile, "/", 2); len(parts) == 2 {
+							if vinfo, ok := vaultEnv[parts[0]]; ok {
+								log.Printf("[DEBUG] Found matching vault for suffix '%s': %+v", parts[0], vinfo)
+								candidate := filepath.Join(vinfo.path, obsFile)
+								log.Printf("[DEBUG] Checking candidate path: %s", candidate)
+								if _, err := os.Stat(candidate); err == nil {
+									obsidianFilePath = candidate
+									vaultIdx = vinfo.idx
+									log.Printf("[DEBUG] Confirmed Obsidian file path: %s, vault index: %d", obsidianFilePath, vaultIdx)
+								} else {
+									log.Printf("[DEBUG] Candidate path does not exist: %s", candidate)
+								}
+							}
+						}
+
+						if obsidianFilePath != "" {
+							contentToUse, err := readObsidianFile(obsidianFilePath)
+							if err == nil {
+								fileContentAmended := "FILENAME: " + obsidianFilePath + "\n" + contentToUse
+								p.UserInput = p.UserInput + "\nJournal File:\n" + fileContentAmended
+								log.Printf("Added content from obsidian file: %s", obsidianFilePath)
+							} else {
+								log.Printf("Error reading obsidian file %s: %v", obsidianFilePath, err)
+							}
+						} else {
+							log.Printf("[DEBUG] Obsidian file path could not be resolved for: %s", p.ObsidianFile)
+						}
 					}
 				}
 
@@ -459,6 +469,96 @@ func readObsidianFile(path string) (string, error) {
 	}
 	log.Printf("[DEBUG] Exiting readObsidianFile for path: %s", path)
 	return contentToUse, nil
+}
+
+func readWeaviateJournal(prompt string, spec string) (string, error) {
+	log.Printf("[DEBUG] Entering readWeaviateJournal. Spec: %s", spec)
+	endpoint := os.Getenv("WEAVIATE_URL")
+	if endpoint == "" {
+		return "", fmt.Errorf("WEAVIATE_URL not set")
+	}
+	payload := map[string]string{
+		"prompt": prompt,
+		"spec":   spec,
+	}
+	bs, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	req, err := http.NewRequest("POST", endpoint, bytes.NewReader(bs))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{Timeout: 20 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("weaviate returned status %d: %s", resp.StatusCode, string(body))
+	}
+	var parsed any
+	if err := json.Unmarshal(body, &parsed); err == nil {
+		if m, ok := parsed.(map[string]any); ok {
+			if d, ok := m["data"]; ok {
+				switch v := d.(type) {
+				case string:
+					return v, nil
+				case []any:
+					var sb strings.Builder
+					for _, item := range v {
+						switch it := item.(type) {
+						case string:
+							sb.WriteString(it)
+							sb.WriteString("\n")
+						case map[string]any:
+							if t, ok := it["text"].(string); ok {
+								sb.WriteString(t)
+								sb.WriteString("\n")
+							}
+						}
+					}
+					out := strings.TrimSpace(sb.String())
+					if out != "" {
+						return out, nil
+					}
+				}
+			}
+			if r, ok := m["result"]; ok {
+				if s, ok := r.(string); ok {
+					return s, nil
+				}
+			}
+			if r, ok := m["results"]; ok {
+				if arr, ok := r.([]any); ok {
+					var sb strings.Builder
+					for _, item := range arr {
+						switch it := item.(type) {
+						case string:
+							sb.WriteString(it)
+							sb.WriteString("\n")
+						case map[string]any:
+							if t, ok := it["text"].(string); ok {
+								sb.WriteString(t)
+								sb.WriteString("\n")
+							}
+						}
+					}
+					out := strings.TrimSpace(sb.String())
+					if out != "" {
+						return out, nil
+					}
+				}
+			}
+		}
+	}
+	return string(body), nil
 }
 
 func (h *ChatHandler) StoreLast(c *gin.Context) {
