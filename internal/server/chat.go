@@ -472,7 +472,7 @@ func readWeaviateJournal(prompt string, spec string) (string, string, error) {
 	}
 	endpoint = strings.TrimRight(endpoint, "/") + "/v1/graphql"
 	escapedPrompt := strings.ReplaceAll(prompt, `"`, `\"`)
-	query := fmt.Sprintf(`{ Get { %s(limit: 1, nearText: {concepts: ["%s"], certainty:%s}) { path content } } }`, className, escapedPrompt, certainty)
+	query := fmt.Sprintf(`{ Get { %s(limit: 1, hybrid: {query: "%s", alpha: %s}) { path content } } }`, className, escapedPrompt, certainty)
 	payload := map[string]string{
 		"query": query,
 	}
