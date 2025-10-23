@@ -3,13 +3,14 @@ package util
 import (
 	"errors"
 	"fmt"
-	"github.com/mmcdole/gofeed"
 	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/mmcdole/gofeed"
 )
 
 // GetAbsolutePath resolves a given path to its absolute form, handling ~, ./, ../, UNC paths, and symlinks.
@@ -192,4 +193,24 @@ func ConvertRSSFeedToMarkdown(url string) (string, error) {
 	out := sb.String()
 	out = strings.ReplaceAll(out, "\"", "") // escape all double quotes
 	return out, nil
+}
+
+func ObsidianPath(obsidianFile string) string {
+	obsidianFile = strings.TrimPrefix(obsidianFile, "/")
+	vaultEnv := make(map[string]string)
+	for _, ev := range os.Environ() {
+		if strings.HasPrefix(ev, "OBSIDIAN_VAULT_PATH_") {
+			partsEnv := strings.SplitN(ev, "=", 2)
+			val := partsEnv[1]
+			parts := strings.Split(val, "/")
+			vaultEnv[parts[len(parts)-2]] = val
+		}
+	}
+	parts := strings.Split(obsidianFile, "/")
+	root := parts[0]
+	filepath := filepath.Join(parts[1:]...)
+	if base, ok := vaultEnv[root]; ok {
+		return base + "/" + filepath
+	}
+	return ""
 }

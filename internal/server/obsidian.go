@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/danielmiessler/fabric/internal/util"
 	"github.com/gin-gonic/gin"
 )
 
@@ -20,15 +21,19 @@ type ObsidianHandler struct {
 // NewObsidianHandler registers endpoints to list, retrieve, and delete Obsidian files
 func NewObsidianHandler(r *gin.Engine) {
 	vaultPaths := make(map[string]string)
-
+	basePath := os.Getenv("OBSIDIAN_BASE_PATH")
+	if basePath == "" {
+		log.Printf("OBSIDIAN_BASE_PATH environment variable not set")
+	}
 	// Check for numbered vault paths (OBSIDIAN_VAULT_PATH_1, OBSIDIAN_VAULT_PATH_2, etc.)
 	for i := 1; i <= 10; i++ {
 		envKey := fmt.Sprintf("OBSIDIAN_VAULT_PATH_%d", i)
 		vaultPath := os.Getenv(envKey)
 		if vaultPath != "" {
 			// Extract folder name from path
-			folderName := filepath.Base(vaultPath)
-			vaultPaths[folderName] = vaultPath
+			parts := strings.Split(vaultPath, "/")
+			folderName := parts[len(parts)-2]
+			vaultPaths[folderName] = basePath + vaultPath
 			log.Printf("Found Obsidian vault: %s at %s", folderName, vaultPath)
 		}
 	}
@@ -83,53 +88,19 @@ func (h *ObsidianHandler) List(c *gin.Context) {
 // the path with the vault name, e.g. "private/note.md" or "shared/note.md"
 func (h *ObsidianHandler) Get(c *gin.Context) {
 	name := c.Param("name")
-	name = strings.TrimPrefix(name, "/")
-	if !strings.HasSuffix(name, ".md") {
-		name += ".md"
-	}
-	clean := filepath.Clean(name)
-	parts := strings.Split(clean, string(os.PathSeparator))
+	filePath := util.ObsidianPath(name)
 
-	// Security check
-	for _, part := range parts {
-		if strings.HasPrefix(part, ".") {
+	data, err := ioutil.ReadFile(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
-			return
-		}
-	}
-
-	// Extract vault prefix and file path
-	var vaultPrefix string
-	var filePath string
-	var data []byte
-	var err error
-
-	if len(parts) > 0 {
-		vaultPrefix = parts[0]
-		rest := strings.Join(parts[1:], string(os.PathSeparator))
-
-		// Check if the prefix matches a known vault
-		if vaultPath, exists := h.vaultPaths[vaultPrefix]; exists {
-			filePath = filepath.Join(vaultPath, rest)
-			data, err = ioutil.ReadFile(filePath)
-			if err != nil {
-				if os.IsNotExist(err) {
-					c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
-				} else {
-					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				}
-				return
-			}
 		} else {
-			c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
-			return
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
-	} else {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid file path"})
 		return
 	}
 
-	header := fmt.Sprintf("FILENAME: %s\n\n", filePath)
+	header := fmt.Sprintf("FILENAME: %s\n\n", name)
 	content := append([]byte(header), data...)
 	c.Data(http.StatusOK, "text/markdown", content)
 }
@@ -137,37 +108,7 @@ func (h *ObsidianHandler) Get(c *gin.Context) {
 // Delete deletes the specified .md file from the configured vault
 func (h *ObsidianHandler) Delete(c *gin.Context) {
 	name := c.Param("name")
-	name = strings.TrimPrefix(name, "/")
-	if !strings.HasSuffix(name, ".md") {
-		name += ".md"
-	}
-	clean := filepath.Clean(name)
-	parts := strings.Split(clean, string(os.PathSeparator))
-
-	// Security check
-	for _, part := range parts {
-		if strings.HasPrefix(part, ".") {
-			c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
-			return
-		}
-	}
-
-	if len(parts) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid file path"})
-		return
-	}
-
-	vaultPrefix := parts[0]
-	rest := strings.Join(parts[1:], string(os.PathSeparator))
-
-	// Check if the prefix matches a known vault
-	vaultPath, exists := h.vaultPaths[vaultPrefix]
-	if !exists {
-		c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
-		return
-	}
-
-	filePath := filepath.Join(vaultPath, rest)
+	filePath := util.ObsidianPath(name)
 	err := os.Remove(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {

@@ -47,7 +47,7 @@ type PromptRequest struct {
 type ChatRequest struct {
 	Prompts            []PromptRequest `json:"prompts"`
 	Language           string          `json:"language"` // Add Language field to bind from request
-	domain.ChatOptions                                   // Embed the ChatOptions from common package
+	domain.ChatOptions                 // Embed the ChatOptions from common package
 }
 
 type StreamResponse struct {
@@ -63,7 +63,6 @@ func NewChatHandler(r *gin.Engine, registry *core.PluginRegistry, db *fsdb.Db) *
 	}
 
 	r.POST("/chat", handler.HandleChat)
-	r.POST("/storelast", handler.StoreLast)
 	r.POST("/store", handler.StoreMessage)
 	r.DELETE("/deletepattern/:name", handler.DeletePattern)
 	return handler
@@ -239,54 +238,11 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 							log.Printf("[ERROR] Error fetching weaviate journal for %s: %v", p.ObsidianFile, err)
 						}
 					} else {
-						type vaultInfo struct {
-							path string
-							idx  int
-						}
-						vaultEnv := make(map[string]vaultInfo)
-						for _, ev := range os.Environ() {
-							if strings.HasPrefix(ev, "OBSIDIAN_VAULT_PATH_") {
-								partsEnv := strings.SplitN(ev, "=", 2)
-								key := partsEnv[0]
-								val := partsEnv[1]
-								keyParts := strings.Split(key, "_")
-								idxStr := keyParts[len(keyParts)-1]
-								idx, err := strconv.Atoi(idxStr)
-								if err != nil {
-									log.Printf("[DEBUG] Skipping invalid vault path env var key: %s", key)
-									continue
-								}
-								suffix := ""
-								prefix := ""
-								if j := strings.LastIndex(val, "/"); j >= 0 {
-									prefix = val[:j]
-									suffix = val[j+1:]
-								}
-								vaultEnv[suffix] = vaultInfo{path: prefix, idx: idx}
-								log.Printf("[DEBUG] Found Obsidian vault env: key=%s, path=%s, index=%d, suffix=%s", key, prefix, idx, suffix)
-							}
-						}
-						obsFile := p.ObsidianFile
-						vaultIdx := 0
-						if parts := strings.SplitN(obsFile, "/", 2); len(parts) == 2 {
-							if vinfo, ok := vaultEnv[parts[0]]; ok {
-								log.Printf("[DEBUG] Found matching vault for suffix '%s': %+v", parts[0], vinfo)
-								candidate := filepath.Join(vinfo.path, obsFile)
-								log.Printf("[DEBUG] Checking candidate path: %s", candidate)
-								if _, err := os.Stat(candidate); err == nil {
-									obsidianFilePath = candidate
-									vaultIdx = vinfo.idx
-									log.Printf("[DEBUG] Confirmed Obsidian file path: %s, vault index: %d", obsidianFilePath, vaultIdx)
-								} else {
-									log.Printf("[DEBUG] Candidate path does not exist: %s", candidate)
-								}
-							}
-						}
-
+						obsidianFilePath = util.ObsidianPath(p.ObsidianFile)
 						if obsidianFilePath != "" {
 							contentToUse, err := readObsidianFile(obsidianFilePath)
 							if err == nil {
-								fileContentAmended := "FILENAME: " + obsidianFilePath + "\n" + contentToUse
+								fileContentAmended := "FILENAME: " + p.ObsidianFile + "\n" + contentToUse
 								p.UserInput = p.UserInput + "\nJournal File:\n" + fileContentAmended
 								log.Printf("Added content from obsidian file: %s", obsidianFilePath)
 							} else {
@@ -543,97 +499,6 @@ func readWeaviateJournal(prompt string, spec string) (string, string, error) {
 	return path, content, nil
 }
 
-func (h *ChatHandler) StoreLast(c *gin.Context) {
-	log.Printf("[DEBUG] Entering StoreLast handler")
-	var req struct {
-		SessionName string `json:"sessionName"`
-	}
-	if err := c.BindJSON(&req); err != nil {
-		log.Printf("[ERROR] StoreLast: Error binding JSON: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	log.Printf("[DEBUG] StoreLast request: %+v", req)
-	if req.SessionName == "" {
-		log.Printf("[ERROR] StoreLast: sessionName is required")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "sessionName is required"})
-		return
-	}
-	fabricHome := os.Getenv("FABRIC_CONFIG_HOME")
-	if fabricHome == "" {
-		log.Printf("[ERROR] StoreLast: FABRIC_CONFIG_HOME not set")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "FABRIC_CONFIG_HOME not set"})
-		return
-	}
-	sessionsDir := filepath.Join(fabricHome, "sessions")
-	sessionFile := filepath.Join(sessionsDir, req.SessionName+".json")
-	log.Printf("[DEBUG] Reading session file: %s", sessionFile)
-	data, err := os.ReadFile(sessionFile)
-	if err != nil {
-		log.Printf("[ERROR] StoreLast: Error reading session file: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error reading session file: %v", err)})
-		return
-	}
-	log.Printf("[DEBUG] Read %d bytes from session file", len(data))
-	var msgs []struct {
-		Role    string `json:"role"`
-		Content string `json:"content"`
-	}
-	if err := json.Unmarshal(data, &msgs); err != nil {
-		log.Printf("[ERROR] StoreLast: Error parsing session JSON: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error parsing session JSON: %v", err)})
-		return
-	}
-	log.Printf("[DEBUG] Parsed %d messages from session", len(msgs))
-	var assistantContent string
-	for i := len(msgs) - 1; i >= 0; i-- {
-		if msgs[i].Role == "assistant" {
-			assistantContent = msgs[i].Content
-			log.Printf("[DEBUG] Found last assistant message.")
-			break
-		}
-	}
-	if assistantContent == "" {
-		log.Printf("[WARNING] StoreLast: no assistant message found in session")
-		c.JSON(http.StatusNotFound, gin.H{"error": "no assistant message found in session"})
-		return
-	}
-	parsed := parseFilenameBlocks(assistantContent)
-	log.Printf("[DEBUG] Parsed %d filename blocks from assistant content", len(parsed))
-	var savedFilenames []string
-	if len(parsed) > 0 {
-		for filename, content := range parsed {
-			log.Printf("[DEBUG] Storing content to filename: %s", filename)
-			dir := filepath.Dir(filename)
-			if dir != "" && dir != "." {
-				log.Printf("[DEBUG] Creating directory: %s", dir)
-				if err := os.MkdirAll(dir, 0755); err != nil {
-					log.Printf("[ERROR] StoreLast: Error creating directory %s: %v", dir, err)
-					c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error creating directory: %v", err)})
-					return
-				}
-			}
-			if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
-				log.Printf("[ERROR] StoreLast: Error writing file %s: %v", filename, err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error writing file %s: %v", filename, err)})
-				return
-			}
-			log.Printf("Stored assistant content to %s", filename)
-			savedFilenames = append(savedFilenames, filename)
-		}
-		c.JSON(http.StatusOK, gin.H{
-			"message":   "Last content stored successfully",
-			"filenames": savedFilenames,
-		})
-	} else {
-		log.Printf("[DEBUG] No FILENAME markers found in last assistant message.")
-		c.JSON(http.StatusOK, gin.H{
-			"message": "No FILENAME markers found; nothing stored",
-		})
-	}
-	log.Printf("[DEBUG] Exiting StoreLast handler")
-}
-
 func (h *ChatHandler) StoreMessage(c *gin.Context) {
 	log.Printf("[DEBUG] Entering StoreMessage handler")
 	var req struct {
@@ -655,6 +520,7 @@ func (h *ChatHandler) StoreMessage(c *gin.Context) {
 	var savedFilenames []string
 	if len(parsed) > 0 {
 		for filename, content := range parsed {
+			filename = util.ObsidianPath(filename)
 			log.Printf("[DEBUG] Storing content to filename: %s", filename)
 			dir := filepath.Dir(filename)
 			if dir != "" && dir != "." {
