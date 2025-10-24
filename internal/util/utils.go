@@ -203,14 +203,13 @@ func ObsidianPath(obsidianFile string) string {
 			partsEnv := strings.SplitN(ev, "=", 2)
 			val := partsEnv[1]
 			parts := strings.Split(val, "/")
-			vaultEnv[parts[len(parts)-2]] = val
+			vaultEnv[parts[0]] = val
 		}
 	}
 	parts := strings.Split(obsidianFile, "/")
 	root := parts[0]
-	filepath := filepath.Join(parts[1:]...)
-	if base, ok := vaultEnv[root]; ok {
-		return base + "/" + filepath
+	if rel, ok := vaultEnv[root]; ok {
+		return os.Getenv("OBSIDIAN_BASE_PATH") + "/" + rel + "/" + filepath.Join(parts[1:]...)
 	}
 	return ""
 }
