@@ -33,7 +33,7 @@ func NewObsidianHandler(r *gin.Engine) {
 			// Extract folder name from path
 			parts := strings.Split(vaultPath, "/")
 			folderName := parts[len(parts)-2]
-			vaultPaths[folderName] = basePath + vaultPath
+			vaultPaths[folderName] = basePath + "/" + vaultPath
 			log.Printf("Found Obsidian vault: %s at %s", folderName, vaultPath)
 		}
 	}
@@ -100,7 +100,7 @@ func (h *ObsidianHandler) Get(c *gin.Context) {
 		return
 	}
 
-	header := fmt.Sprintf("FILENAME: %s\n\n", name)
+	header := fmt.Sprintf("FILENAME: %s\n\n", strings.TrimPrefix(name, "/"))
 	content := append([]byte(header), data...)
 	c.Data(http.StatusOK, "text/markdown", content)
 }
