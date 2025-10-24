@@ -196,6 +196,9 @@ func ConvertRSSFeedToMarkdown(url string) (string, error) {
 }
 
 func ObsidianPath(obsidianFile string) string {
+	if strings.Contains(obsidianFile, "/patterns/") {
+		return os.Getenv("OBSIDIAN_BASE_PATH") + "/" + obsidianFile
+	}
 	obsidianFile = strings.TrimPrefix(obsidianFile, "/")
 	vaultEnv := make(map[string]string)
 	for _, ev := range os.Environ() {
