@@ -427,11 +427,13 @@ func (h *ChatHandler) StoreMessage(c *gin.Context) {
 			dir := filepath.Dir(filename)
 			if dir != "" && dir != "." {
 				if err := os.MkdirAll(dir, 0755); err != nil {
+					log.Printf("[ERROR] " + fmt.Sprintf("Error creating directory: %v", err))
 					c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error creating directory: %v", err)})
 					return
 				}
 			}
 			if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
+				log.Printf("[ERROR] " + fmt.Sprintf("Error writing file %s: %v", filename, err))
 				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error writing file %s: %v", filename, err)})
 				return
 			}
