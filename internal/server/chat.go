@@ -195,7 +195,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 								contentToUse := contents[idx]
 								fileContentAmended := "FILENAME: " + path + "\n" + contentToUse
 								p.UserInput = p.UserInput + "\nJournal File:\n" + fileContentAmended
-								log.Printf("[INFO] Added content from weaviate spec: %s (path: %s)", p.ObsidianFile, path)
+								log.Printf("[INFO] Added content from weaviate (path: %s)", path)
 							}
 						}
 					} else {
@@ -325,7 +325,7 @@ func readWeaviateJournal(prompt string, spec string) ([]string, []string, error)
 	}
 	endpoint = strings.TrimRight(endpoint, "/") + "/v1/graphql"
 	escapedPrompt := strings.ReplaceAll(prompt, `"`, `\"`)
-	query := fmt.Sprintf(`{ Get { %s(limit: 3, hybrid: {query: "%s", alpha: %s}) { path content } } }`, className, escapedPrompt, certainty)
+	query := fmt.Sprintf(`{ Get { %s(limit: 1, hybrid: {query: "%s", alpha: %s}) { path content } } }`, className, escapedPrompt, certainty)
 	payload := map[string]string{"query": query}
 	bs, err := json.Marshal(payload)
 	if err != nil {
