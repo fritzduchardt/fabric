@@ -187,25 +187,23 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 					p.UserInput = p.UserInput + "\nURL Content:\n" + content
 					totalLinkChars += len(text)
 				}
-				if p.ObsidianFile != "" {
-					if p.ObsidianFile == "weaviate" {
-						paths, contents, err := readWeaviateJournal(p.UserInput, p.ObsidianFile)
-						if err == nil {
-							for idx, path := range paths {
-								contentToUse := contents[idx]
-								fileContentAmended := "FILENAME: " + path + "\n" + contentToUse
-								p.UserInput = p.UserInput + "\nJournal File:\n" + fileContentAmended
-								log.Printf("[INFO] Added content from weaviate (path: %s)", path)
-							}
+				if p.ObsidianFile == "" && p.PatternName == "protocol" {
+					paths, contents, err := readWeaviateJournal(p.UserInput)
+					if err == nil {
+						for idx, path := range paths {
+							contentToUse := contents[idx]
+							fileContentAmended := "FILENAME: " + path + "\n" + contentToUse
+							p.UserInput = p.UserInput + "\nJournal File:\n" + fileContentAmended
+							log.Printf("[INFO] Added content from weaviate (path: %s)", path)
 						}
-					} else {
-						obsidianFilePath := util.ObsidianPath(p.ObsidianFile)
-						if obsidianFilePath != "" {
-							contentToUse, err := readObsidianFile(obsidianFilePath)
-							if err == nil {
-								fileContentAmended := "FILENAME: " + p.ObsidianFile + "\n" + contentToUse
-								p.UserInput = p.UserInput + "\nJournal File:\n" + fileContentAmended
-							}
+					}
+				} else if p.ObsidianFile != "" {
+					obsidianFilePath := util.ObsidianPath(p.ObsidianFile)
+					if obsidianFilePath != "" {
+						contentToUse, err := readObsidianFile(obsidianFilePath)
+						if err == nil {
+							fileContentAmended := "FILENAME: " + p.ObsidianFile + "\n" + contentToUse
+							p.UserInput = p.UserInput + "\nJournal File:\n" + fileContentAmended
 						}
 					}
 				}
@@ -312,8 +310,8 @@ func readObsidianFile(path string) (string, error) {
 	return contentToUse, nil
 }
 
-func readWeaviateJournal(prompt string, spec string) ([]string, []string, error) {
-	log.Printf("[DEBUG] Entering readWeaviateJournal. Spec: %s", spec)
+func readWeaviateJournal(prompt string) ([]string, []string, error) {
+	log.Printf("[DEBUG] Entering readWeaviateJournal")
 	endpoint := os.Getenv("WEAVIATE_URL")
 	certainty := os.Getenv("WEAVIATE_CERTAINTY")
 	className := os.Getenv("WEAVIATE_CLASS")
