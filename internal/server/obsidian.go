@@ -20,25 +20,12 @@ type ObsidianHandler struct {
 
 // NewObsidianHandler registers endpoints to list, retrieve, and delete Obsidian files
 func NewObsidianHandler(r *gin.Engine) {
-	vaultPaths := make(map[string]string)
 	basePath := os.Getenv("OBSIDIAN_BASE_PATH")
 	if basePath == "" {
 		log.Printf("OBSIDIAN_BASE_PATH environment variable not set")
 	}
-	// Check for numbered vault paths (OBSIDIAN_VAULT_PATH_1, OBSIDIAN_VAULT_PATH_2, etc.)
-	for i := 1; i <= 10; i++ {
-		envKey := fmt.Sprintf("OBSIDIAN_VAULT_PATH_%d", i)
-		vaultPath := os.Getenv(envKey)
-		if vaultPath != "" {
-			// Extract folder name from path
-			parts := strings.Split(vaultPath, "/")
-			folderName := parts[len(parts)-2]
-			vaultPaths[folderName] = basePath + "/" + vaultPath
-			log.Printf("Found Obsidian vault: %s at %s", folderName, vaultPath)
-		}
-	}
 	handler := &ObsidianHandler{
-		vaultPaths: vaultPaths,
+		vaultPaths: util.PathMap(),
 	}
 
 	// List all markdown files under all vaults
@@ -52,8 +39,9 @@ func NewObsidianHandler(r *gin.Engine) {
 // List returns a JSON array of all .md files in all vaults (relative paths)
 func (h *ObsidianHandler) List(c *gin.Context) {
 	var files []string
+	basePath := os.Getenv("OBSIDIAN_BASE_PATH")
 
-	for prefix, rootPath := range h.vaultPaths {
+	for _, rootPath := range h.vaultPaths {
 		err := filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
@@ -66,17 +54,12 @@ func (h *ObsidianHandler) List(c *gin.Context) {
 				return nil
 			}
 			if !info.IsDir() && filepath.Ext(name) == ".md" {
-				rel, err := filepath.Rel(rootPath, path)
-				if err != nil {
-					return err
-				}
-				// Prefix all paths with their vault name
-				files = append(files, filepath.Join(prefix, rel))
+				files = append(files, strings.TrimPrefix(path, basePath+"/"))
 			}
 			return nil
 		})
 		if err != nil {
-			log.Printf("Error walking vault %s: %v", prefix, err)
+			log.Printf("Error walking vault %s: %v", rootPath, err)
 		}
 	}
 
