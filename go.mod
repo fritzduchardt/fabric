@@ -19,6 +19,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51
 	github.com/mattn/go-sqlite3 v1.14.28
+	github.com/mmcdole/gofeed v1.3.0
 	github.com/nicksnyder/go-i18n/v2 v2.6.0
 	github.com/ollama/ollama v0.11.7
 	github.com/openai/openai-go v1.8.2
@@ -37,8 +38,10 @@ require (
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.19.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.11.2 // indirect
+	github.com/PuerkitoBio/goquery v1.8.0 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
+	github.com/mmcdole/goxpp v1.1.1-0.20240225020742-a0c311522b23 // indirect
 )
 
 require (
