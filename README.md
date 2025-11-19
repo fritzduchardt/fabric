@@ -44,8 +44,6 @@
 [Helper Apps](#helper-apps) •
 [Meta](#meta)
 
-![Screenshot of fabric](./docs/images/fabric-summarize.png)
-
 </div>
 
 ## What and why
@@ -64,6 +62,9 @@ Fabric organizes prompts by real-world task, allowing people to create, collect,
 
 ## Updates
 
+<details>
+<summary>Click to view recent updates</summary>
+
 Dear Users,
 
 We've been doing so many exciting things here at Fabric, I wanted to give a quick summary here to give you a sense of our development velocity!
@@ -72,6 +73,11 @@ Below are the **new features and capabilities** we've added (newest first):
 
 ### Recent Major Features
 
+- [v1.4.322](https://github.com/danielmiessler/fabric/releases/tag/v1.4.322) (Nov 5, 2025) — **Interactive HTML Concept Maps and Claude Sonnet 4.5**: Adds `create_conceptmap` pattern for visual knowledge representation using Vis.js, introduces WELLNESS category with psychological analysis patterns, and upgrades to Claude Sonnet 4.5
+- [v1.4.317](https://github.com/danielmiessler/fabric/releases/tag/v1.4.317) (Sep 21, 2025) — **Portuguese Language Variants**: Adds BCP 47 locale normalization with support for Brazilian Portuguese (pt-BR) and European Portuguese (pt-PT) with intelligent fallback chains
+- [v1.4.314](https://github.com/danielmiessler/fabric/releases/tag/v1.4.314) (Sep 17, 2025) — **Azure OpenAI Migration**: Migrates to official `openai-go/azure` SDK with improved authentication and default API version support
+- [v1.4.311](https://github.com/danielmiessler/fabric/releases/tag/v1.4.311) (Sep 13, 2025) — **More internationalization support**: Adds de (German), fa (Persian / Farsi), fr (French), it (Italian),
+  ja (Japanese), pt (Portuguese), zh (Chinese)
 - [v1.4.309](https://github.com/danielmiessler/fabric/releases/tag/v1.4.309) (Sep 9, 2025) — **Comprehensive internationalization support**: Includes English and Spanish locale files.
 - [v1.4.303](https://github.com/danielmiessler/fabric/releases/tag/v1.4.303) (Aug 29, 2025) — **New Binary Releases**: Linux ARM and Windows ARM targets. You can run Fabric on the Raspberry PI and on your Windows Surface!
 - [v1.4.294](https://github.com/danielmiessler/fabric/releases/tag/v1.4.294) (Aug 20, 2025) — **Venice AI Support**: Added the Venice AI provider. Venice is a Privacy-First, Open-Source AI provider. See their ["About Venice"](https://docs.venice.ai/overview/about-venice) page for details.
@@ -111,6 +117,8 @@ Below are the **new features and capabilities** we've added (newest first):
 - [v1.4.203](https://github.com/danielmiessler/fabric/releases/tag/v1.4.203) (Jun 14, 2025) — **Add Amazon Bedrock**: Add support for Amazon Bedrock
 
 These features represent our commitment to making Fabric the most powerful and flexible AI augmentation framework available!
+
+</details>
 
 ## Intro videos
 
@@ -156,6 +164,7 @@ Keep in mind that many of these were recorded when Fabric was Python-based, so r
       - [Fish Completion](#fish-completion)
   - [Usage](#usage)
     - [Debug Levels](#debug-levels)
+    - [Extensions](#extensions)
   - [Our approach to prompting](#our-approach-to-prompting)
   - [Examples](#examples)
   - [Just use the Patterns](#just-use-the-patterns)
@@ -169,10 +178,7 @@ Keep in mind that many of these were recorded when Fabric was Python-based, so r
     - [`to_pdf` Installation](#to_pdf-installation)
     - [`code_helper`](#code_helper)
   - [pbpaste](#pbpaste)
-  - [Web Interface](#web-interface)
-    - [Installing](#installing)
-    - [Streamlit UI](#streamlit-ui)
-      - [Clipboard Support](#clipboard-support)
+  - [Web Interface (Fabric Web App)](#web-interface-fabric-web-app)
   - [Meta](#meta)
     - [Primary contributors](#primary-contributors)
     - [Contributors](#contributors)
@@ -343,17 +349,20 @@ If everything works you are good to go.
 
 ### Add aliases for all patterns
 
-In order to add aliases for all your patterns and use them directly as commands ie. `summarize` instead of `fabric --pattern summarize`
-You can add the following to your `.zshrc` or `.bashrc` file.
+In order to add aliases for all your patterns and use them directly as commands, for example, `summarize` instead of `fabric --pattern summarize`
+You can add the following to your `.zshrc` or `.bashrc` file. You
+can also optionally set the `FABRIC_ALIAS_PREFIX` environment variable
+before, if you'd prefer all the fabric aliases to start with the same prefix.
 
 ```bash
 # Loop through all files in the ~/.config/fabric/patterns directory
 for pattern_file in $HOME/.config/fabric/patterns/*; do
     # Get the base name of the file (i.e., remove the directory path)
-    pattern_name=$(basename "$pattern_file")
+    pattern_name="$(basename "$pattern_file")"
+    alias_name="${FABRIC_ALIAS_PREFIX:-}${pattern_name}"
 
     # Create an alias in the form: alias pattern_name="fabric --pattern pattern_name"
-    alias_command="alias $pattern_name='fabric --pattern $pattern_name'"
+    alias_command="alias $alias_name='fabric --pattern $pattern_name'"
 
     # Evaluate the alias command to add it to the current shell
     eval "$alias_command"
@@ -382,11 +391,13 @@ You can add the below code for the equivalent aliases inside PowerShell by runni
 # Path to the patterns directory
 $patternsPath = Join-Path $HOME ".config/fabric/patterns"
 foreach ($patternDir in Get-ChildItem -Path $patternsPath -Directory) {
-    $patternName = $patternDir.Name
-
+    # Prepend FABRIC_ALIAS_PREFIX if set; otherwise use empty string
+    $prefix = $env:FABRIC_ALIAS_PREFIX ?? ''
+    $patternName = "$($patternDir.Name)"
+    $aliasName = "$prefix$patternName"
     # Dynamically define a function for each pattern
     $functionDefinition = @"
-function $patternName {
+function $aliasName {
     [CmdletBinding()]
     param(
         [Parameter(ValueFromPipeline = `$true)]
@@ -612,9 +623,10 @@ Application Options:
   -T, --topp=                       Set top P (default: 0.9)
   -s, --stream                      Stream
   -P, --presencepenalty=            Set presence penalty (default: 0.0)
-  -r, --raw                         Use the defaults of the model without sending chat options (like
-                                    temperature etc.) and use the user role instead of the system role for
-                                    patterns.
+  -r, --raw                         Use the defaults of the model without sending chat options
+                                    (temperature, top_p, etc.). Only affects OpenAI-compatible providers.
+                                    Anthropic models always use smart parameter selection to comply with
+                                    model-specific requirements.
   -F, --frequencypenalty=           Set frequency penalty (default: 0.0)
   -l, --listpatterns                List all patterns
   -L, --listmodels                  List all available models
@@ -697,6 +709,12 @@ Use the `--debug` flag to control runtime logging:
 - `1`: basic debug info
 - `2`: detailed debugging
 - `3`: trace level
+
+### Extensions
+
+Fabric supports extensions that can be called within patterns. See the [Extension Guide](internal/plugins/template/Examples/README.md) for complete documentation.
+
+**Important:** Extensions only work within pattern files, not via direct stdin. See the guide for details and examples.
 
 ## Our approach to prompting
 
@@ -894,60 +912,9 @@ You can also create an alias by editing `~/.bashrc` or `~/.zshrc` and adding the
 alias pbpaste='xclip -selection clipboard -o'
 ```
 
-## Web Interface
+## Web Interface (Fabric Web App)
 
-Fabric now includes a built-in web interface that provides a GUI alternative to the command-line interface and an out-of-the-box website for those who want to get started with web development or blogging.
-You can use this app as a GUI interface for Fabric, a ready to go blog-site, or a website template for your own projects.
-
-The `web/src/lib/content` directory includes starter `.obsidian/` and `templates/` directories, allowing you to open up the `web/src/lib/content/` directory as an [Obsidian.md](https://obsidian.md) vault. You can place your posts in the posts directory when you're ready to publish.
-
-### Installing
-
-The GUI can be installed by navigating to the `web` directory and using `npm install`, `pnpm install`, or your favorite package manager. Then simply run the development server to start the app.
-
-_You will need to run fabric in a separate terminal with the `fabric --serve` command._
-
-**From the fabric project `web/` directory:**
-
-```shell
-npm run dev
-
-## or ##
-
-pnpm run dev
-
-## or your equivalent
-```
-
-### Streamlit UI
-
-To run the Streamlit user interface:
-
-```bash
-# Install required dependencies
-pip install -r requirements.txt
-
-# Or manually install dependencies
-pip install streamlit pandas matplotlib seaborn numpy python-dotenv pyperclip
-
-# Run the Streamlit app
-streamlit run streamlit.py
-```
-
-The Streamlit UI provides a user-friendly interface for:
-
-- Running and chaining patterns
-- Managing pattern outputs
-- Creating and editing patterns
-- Analyzing pattern results
-
-#### Clipboard Support
-
-The Streamlit UI supports clipboard operations across different platforms:
-
-- **macOS**: Uses `pbcopy` and `pbpaste` (built-in)
-- **Windows**: Uses `pyperclip` library (install with `pip install pyperclip`)
-- **Linux**: Uses `xclip` (install with `sudo apt-get install xclip` or equivalent for your Linux distribution)
+Fabric now includes a built-in web interface that provides a GUI alternative to the command-line interface. Refer to [Web App README](/web/README.md) for installation instructions and an overview of features.
 
 ## Meta
 

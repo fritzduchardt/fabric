@@ -17,8 +17,6 @@ var (
 	placeholderRe = regexp.MustCompile(`{{\s*[^{}\s]+\s*}}`)
 )
 
-const inputSentinel = "__FABRIC_INPUT_SENTINEL_TOKEN__"
-
 type PatternsEntity struct {
 	*StorageEntity
 	SystemPatternFile      string
@@ -81,12 +79,12 @@ func (o *PatternsEntity) applyVariables(
 
 	// Temporarily replace {{input}} with a sentinel token to protect it
 	// from recursive variable resolution
-	withSentinel := strings.ReplaceAll(pattern.Pattern, "{{input}}", inputSentinel)
+	withSentinel := strings.ReplaceAll(pattern.Pattern, "{{input}}", template.InputSentinel)
 
 	// Process all other template variables in the pattern
-	// At this point, our sentinel ensures {{input}} won't be affected
+	// Pass the actual input so extension calls can use {{input}} within their value parameter
 	var processed string
-	if processed, err = template.ApplyTemplate(withSentinel, variables, ""); err != nil {
+	if processed, err = template.ApplyTemplate(withSentinel, variables, input); err != nil {
 		return
 	}
 
@@ -96,7 +94,7 @@ func (o *PatternsEntity) applyVariables(
 
 	// Finally, replace our sentinel with the actual user input
 	// The input has already been processed for variables if InputHasVars was true
-	pattern.Pattern = strings.ReplaceAll(processed, inputSentinel, input)
+	pattern.Pattern = strings.ReplaceAll(processed, template.InputSentinel, input)
 	return
 }
 

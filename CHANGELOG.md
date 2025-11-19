@@ -1,5 +1,315 @@
 # Changelog
 
+## v1.4.328 (2025-11-18)
+
+### PR [#1836](https://github.com/danielmiessler/Fabric/pull/1836) by [ksylvan](https://github.com/ksylvan): docs: clarify `--raw` flag behavior for OpenAI and Anthropic providers
+
+- Update `--raw` flag description across all documentation files
+- Clarify flag only affects OpenAI-compatible providers behavior
+- Document Anthropic models use smart parameter selection
+- Remove outdated reference to system/user role changes
+- Update help text in CLI flags definition
+
+## v1.4.327 (2025-11-16)
+
+### PR [#1831](https://github.com/danielmiessler/Fabric/pull/1831) by [ksylvan](https://github.com/ksylvan): Remove `get_youtube_rss` pattern
+
+- Chore: remove `get_youtube_rss` pattern from multiple files
+- Remove `get_youtube_rss` from `pattern_explanations.md`
+- Delete `get_youtube_rss` entry in `pattern_descriptions.json`
+- Delete `get_youtube_rss` entry in `pattern_extracts.json`
+- Remove `get_youtube_rss` from `suggest_pattern/system.md`
+
+### PR [#1832](https://github.com/danielmiessler/Fabric/pull/1832) by [ksylvan](https://github.com/ksylvan): Improve channel management in Gemini provider
+
+- Fix: improve channel management in Gemini streaming method
+- Add deferred channel close at function start
+- Return error immediately instead of breaking loop
+- Remove redundant channel close statements from loop
+- Ensure channel closes on all exit paths consistently
+
+## v1.4.326 (2025-11-16)
+
+### PR [#1830](https://github.com/danielmiessler/Fabric/pull/1830) by [ksylvan](https://github.com/ksylvan): Ensure final newline in model generated outputs
+
+- Feat: ensure newline in `CreateOutputFile` and improve tests
+- Add newline to `CreateOutputFile` if missing
+- Use `t.Cleanup` for file removal in tests
+- Add test for message with trailing newline
+- Introduce `printedStream` flag in `Chatter.Send`
+
+### Direct commits
+
+- Chore: update README with recent features and extensions
+
+- Add v1.4.322 release with concept maps
+
+- Introduce WELLNESS category with psychological analysis
+- Upgrade to Claude Sonnet 4.5
+
+- Add Portuguese language variants with BCP 47 support
+- Migrate to `openai-go/azure` SDK for Azure
+
+- Add Extensions section to README navigation
+
+## v1.4.325 (2025-11-15)
+
+### PR [#1828](https://github.com/danielmiessler/Fabric/pull/1828) by [ksylvan](https://github.com/ksylvan): Fix empty string detection in chatter and AI clients
+
+- Chore: improve message handling by trimming whitespace in content checks
+- Remove default space in `BuildSession` message content
+- Trim whitespace in `anthropic` message content check
+- Trim whitespace in `gemini` message content check
+
+## v1.4.324 (2025-11-14)
+
+### PR [#1827](https://github.com/danielmiessler/Fabric/pull/1827) by [ksylvan](https://github.com/ksylvan): Make YouTube API key optional in setup
+
+- Make YouTube API key optional in setup process
+- Change API key setup question to optional configuration
+- Add test for optional API key behavior
+- Ensure plugin configuration works without API key
+
+## v1.4.323 (2025-11-12)
+
+### PR [#1802](https://github.com/danielmiessler/Fabric/pull/1802) by [nickarino](https://github.com/nickarino): fix: improve template extension handling for {{input}} and add examples
+
+- Fix: improve template extension handling for {{input}} and add examples
+
+### PR [#1823](https://github.com/danielmiessler/Fabric/pull/1823) by [ksylvan](https://github.com/ksylvan): Add missing patterns and renumber pattern explanations list
+
+- Add `apply_ul_tags` pattern for content categorization
+- Add `extract_mcp_servers` pattern for MCP server identification
+- Add `generate_code_rules` pattern for AI coding guardrails
+- Add `t_check_dunning_kruger` pattern for competence assessment
+- Renumber all patterns from 37-226 to 37-230
+
+### Direct commits
+
+- Chore: incoming 1823 changelog entry
+
+## v1.4.322 (2025-11-05)
+
+### PR [#1814](https://github.com/danielmiessler/Fabric/pull/1814) by [ksylvan](https://github.com/ksylvan): Add Concept Map in html
+
+- Add `create_conceptmap` for interactive HTML concept maps using Vis.js
+- Add `fix_typos` for proofreading and correcting text errors
+- Introduce `model_as_sherlock_freud` for psychological modeling and behavior analysis
+- Implement `predict_person_actions` for behavioral response predictions
+- Add `recommend_yoga_practice` for personalized yoga guidance
+- Credit goes to @FELIPEGUEDESBR for the pattern
+
+
+### PR [#1816](https://github.com/danielmiessler/Fabric/pull/1816) by [ksylvan](https://github.com/ksylvan): Update `anthropic-sdk-go` to v1.16.0 and update models
+
+- Upgraded `anthropic-sdk-go` from v1.13.0 to v1.16.0
+- Removed outdated model `ModelClaude3_5SonnetLatest`
+- Added new model `ModelClaudeSonnet4_5_20250929`
+- Updated anthropic beta map to include the new model
+- Updated dependencies in `go.sum` file
+
+## v1.4.321 (2025-11-03)
+
+### PR [#1803](https://github.com/danielmiessler/Fabric/pull/1803) by [dependabot[bot][bot]](https://github.com/apps/dependabot): chore(deps-dev): bump vite from 5.4.20 to 5.4.21 in /web in the npm_and_yarn group across 1 directory
+
+- Updated Vite development dependency from version 5.4.20 to 5.4.21 in the web directory
+
+### PR [#1805](https://github.com/danielmiessler/Fabric/pull/1805) by [OmriH-Elister](https://github.com/OmriH-Elister): Added several new patterns
+
+- Added new WELLNESS category with four patterns including personalized yoga practice recommendations and wellness guidance
+- Added `model_as_sherlock_freud` pattern for psychological detective analysis combining Sherlock Holmes deduction with Freudian psychology
+- Added `predict_person_actions` pattern for behavioral response predictions based on personality analysis
+- Added `fix_typos` pattern for automated proofreading and typo corrections
+- Updated ANALYSIS and SELF categories to include new wellness-related patterns and classifications
+
+### PR [#1808](https://github.com/danielmiessler/Fabric/pull/1808) by [sluosapher](https://github.com/sluosapher): Updated create_newsletter_entry pattern to generate more factual titles
+
+- Updated the title generation style; added an output example.
+
+## v1.4.320 (2025-10-28)
+
+### PR [#1780](https://github.com/danielmiessler/Fabric/pull/1780) by [marcas756](https://github.com/marcas756): feat: add extract_characters pattern
+
+- Define character extraction goals and steps with canonical naming and deduplication rules
+- Outline interaction mapping and narrative importance analysis
+- Provide comprehensive output schema with proper formatting guidelines
+- Include positive and negative examples for pattern clarity
+- Enforce restrictions on speculative motivations and non-actor inclusion
+
+### PR [#1794](https://github.com/danielmiessler/Fabric/pull/1794) by [starfish456](https://github.com/starfish456): Enhance web app docs
+
+- Remove duplicate content from the main readme and link to the web app readme
+- Update table of contents with proper nesting and fix minor formatting issues
+
+### PR [#1810](https://github.com/danielmiessler/Fabric/pull/1810) by [tonymet](https://github.com/tonymet): improve subtitle lang, retry, debugging & error handling
+
+- Improve subtitle lang, retry, debugging & error handling
+
+### Direct commits
+
+- Docs: clean up README - remove duplicate image and add collapsible updates section
+
+- Remove duplicate fabric-summarize.png screenshot
+- Wrap Updates section in HTML details/summary accordion to save space
+🤖 Generated with [Claude Code](<https://claude.com/claude-code)>
+Co-Authored-By: Claude <noreply@anthropic.com>
+- Updated CSE pattern.
+
+## v1.4.319 (2025-09-30)
+
+### PR [#1783](https://github.com/danielmiessler/Fabric/pull/1783) by [ksylvan](https://github.com/ksylvan): Update anthropic-sdk-go and add claude-sonnet-4-5
+
+- Feat: update `anthropic-sdk-go` to v1.13.0 and add new model
+- Upgrade `anthropic-sdk-go` to version 1.13.0
+- Add `ModelClaudeSonnet4_5` to supported models list
+
+## v1.4.318 (2025-09-24)
+
+### PR [#1779](https://github.com/danielmiessler/Fabric/pull/1779) by [ksylvan](https://github.com/ksylvan): Improve pt-BR Translation - Thanks to @JuracyAmerico
+
+- Fix: improve PT-BR translation naturalness and fluency
+- Replace "dos" with "entre" for better preposition usage
+- Add definite articles where natural in Portuguese
+- Clarify "configurações padrão" instead of just "padrões"
+- Keep technical terms visible like "padrões/patterns"
+
+## v1.4.317 (2025-09-21)
+
+### PR [#1778](https://github.com/danielmiessler/Fabric/pull/1778) by [ksylvan](https://github.com/ksylvan): Add Portuguese Language Variants Support (pt-BR and pt-PT)
+
+- Add Brazilian Portuguese (pt-BR) translation file
+- Add European Portuguese (pt-PT) translation file
+- Implement BCP 47 locale normalization system
+- Create fallback chain for language variants
+- Add default variant mapping for Portuguese
+
+## v1.4.316 (2025-09-20)
+
+### PR [#1777](https://github.com/danielmiessler/Fabric/pull/1777) by [ksylvan](https://github.com/ksylvan): chore: remove garble installation from release workflow
+
+- Remove garble installation step from release workflow
+- Add comment for GoReleaser config file reference link
+- The original idea of adding garble was to make it pass
+  virus scanning during version upgrades for Winget, and
+  this was a failed experiment.
+
+## v1.4.315 (2025-09-20)
+
+### Direct commits
+
+- Chore: update CI workflow and simplify goreleaser build configuration
+
+- Add changelog database to git tracking
+
+- Remove unnecessary goreleaser comments
+- Add version metadata to default build
+
+- Rename windows build from garbled to standard
+- Remove garble obfuscation from windows build
+
+- Standardize ldflags across all build targets
+- Inject version info during compilation
+
+## v1.4.314 (2025-09-17)
+
+### PR [#1774](https://github.com/danielmiessler/Fabric/pull/1774) by [ksylvan](https://github.com/ksylvan): Migrate Azure client to openai-go/azure and default API version
+
+- Migrated Azure client to openai-go/azure and default API version
+- Switched Azure OpenAI config to openai-go azure helpers and now require API key and base URL during configuration
+- Set default API version to 2024-05-01-preview when unspecified
+- Updated dependencies to support azure client and authentication flow
+- Removed latest-tag boundary logic from changelog walker and simplified version assignment by matching commit messages directly
+
+### Direct commits
+
+- Fix: One-time fix for CHANGELOG and changelog cache db
+
+## v1.4.313 (2025-09-16)
+
+### PR [#1773](https://github.com/danielmiessler/Fabric/pull/1773) by [ksylvan](https://github.com/ksylvan): Add Garble Obfuscation for Windows Builds
+
+- Add garble obfuscation for Windows builds and fix changelog generation
+- Add garble tool installation to release workflow
+- Configure garble obfuscation for Windows builds only
+- Fix changelog walker to handle unreleased commits
+- Implement boundary detection for released vs unreleased commits
+
+## v1.4.312 (2025-09-14)
+
+### PR [#1769](https://github.com/danielmiessler/Fabric/pull/1769) by [ksylvan](https://github.com/ksylvan): Go 1.25.1 Upgrade & Critical SDK Updates
+
+- Upgrade Go from 1.24 to 1.25.1
+- Update Anthropic SDK for web fetch tools
+- Upgrade AWS Bedrock SDK 12 versions
+- Update Azure Core and Identity SDKs
+- Fix Nix config for Go version lag
+
+## v1.4.311 (2025-09-13)
+
+### PR [#1767](https://github.com/danielmiessler/Fabric/pull/1767) by [ksylvan](https://github.com/ksylvan): feat(i18n): add de, fr, ja, pt, zh, fa locales; expand tests
+
+- Add DE, FR, JA, PT, ZH, FA i18n locale files
+- Expand i18n tests with table-driven multilingual coverage
+- Verify 'html_readability_error' translations across all supported languages
+- Update README with release notes for added languages
+- Insert blank lines between aggregated PR changelog sections
+
+### Direct commits
+
+- Chore: update changelog formatting and sync changelog database
+
+- Add line breaks to improve changelog readability
+
+- Sync changelog database with latest entries
+- Clean up whitespace in version sections
+
+- Maintain consistent formatting across entries
+- Chore: add spacing between changelog entries for improved readability
+
+- Add blank lines between PR sections
+
+- Update changelog database with  to correspond with CHANGELOG fix.
+
+## v1.4.310 (2025-09-11)
+
+### PR [#1759](https://github.com/danielmiessler/Fabric/pull/1759) by [ksylvan](https://github.com/ksylvan): Add Windows-style Flag Support for Language Detection
+
+- Feat: add Windows-style forward slash flag support to CLI argument parser
+- Add runtime OS detection for Windows platform
+- Support `/flag` syntax for Windows command line
+- Handle Windows colon delimiter `/flag:value` format
+- Maintain backward compatibility with Unix-style flags
+
+### PR [#1762](https://github.com/danielmiessler/Fabric/pull/1762) by [OmriH-Elister](https://github.com/OmriH-Elister): New pattern for writing interaction between two characters
+
+- Feat: add new pattern that creates story simulating interaction between two people
+- Chore: add `create_story_about_people_interaction` pattern for persona analysis
+- Add `create_story_about_people_interaction` pattern description
+- Include pattern in `ANALYSIS` and `WRITING` categories
+- Update `suggest_pattern` system and user documentation
+
+### Direct commits
+
+- Chore: update alias creation to use consistent naming
+
+- Remove redundant prefix from `pattern_name` variable
+
+- Add `alias_name` variable for consistent alias creation
+- Update alias command to use `alias_name`
+
+- Modify PowerShell function to use `aliasName`
+- Docs: add optional prefix support for fabric pattern aliases via FABRIC_ALIAS_PREFIX env var
+
+- Add FABRIC_ALIAS_PREFIX environment variable support
+
+- Update bash/zsh alias generation with prefix
+- Update PowerShell alias generation with prefix
+
+- Improve readability of alias setup instructions
+- Enable custom prefixing for pattern commands
+
+- Maintain backward compatibility without prefix
+
 ## v1.4.309 (2025-09-09)
 
 ### PR [#1756](https://github.com/danielmiessler/Fabric/pull/1756) by [ksylvan](https://github.com/ksylvan): Add Internationalization Support with Custom Help System
@@ -19,6 +329,7 @@
 - Fix broken Warp sponsorship image URL
 - Remove solve_with_cot pattern from codebase
 - Update pattern descriptions and explanations
+
 ### Direct commits
 
 - Update Warp sponsor section with proper formatting
@@ -26,7 +337,7 @@
 - Replace with correct div structure and styling
 - Use proper Warp image URL from brand assets
 
-- Add 'Special thanks to:' text and platform availability
+- Add "Special thanks to:" text and platform availability
 - Maintains proper spacing and alignment
 - Fix unclosed div tag in README causing display issues
 
@@ -36,6 +347,7 @@
 - Ensure proper markdown rendering on GitHub
 🤖 Generated with [Claude Code](<https://claude.ai/code)>
 Co-Authored-By: Claude <noreply@anthropic.com>
+
 - Update Warp sponsor section with new banner and branding
 
 - Replace old banner with new warp-banner-light.png image
@@ -205,6 +517,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 - Compare vendor and model case-insensitively when marking
 - Pass registry defaults to PrintWithVendor from CLI
 - Add test ensuring default selection appears with asterisk
+
 ### Direct commits
 
 - Docs: update version number in README updates section from v1.4.290 to v1.4.291

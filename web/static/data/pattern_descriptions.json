@@ -159,7 +159,8 @@
       "tags": [
         "ANALYSIS",
         "STRATEGY",
-        "SELF"
+        "SELF",
+        "WELLNESS"
       ]
     },
     {
@@ -744,7 +745,8 @@
       "tags": [
         "ANALYSIS",
         "RESEARCH",
-        "SELF"
+        "SELF",
+        "WELLNESS"
       ]
     },
     {
@@ -1060,7 +1062,8 @@
       "tags": [
         "EXTRACT",
         "SELF",
-        "WISDOM"
+        "WISDOM",
+        "WELLNESS"
       ]
     },
     {
@@ -1096,14 +1099,6 @@
       "tags": [
         "ANALYSIS",
         "REVIEW"
-      ]
-    },
-    {
-      "patternName": "get_youtube_rss",
-      "description": "Generate RSS feed URLs for YouTube channels.",
-      "tags": [
-        "CONVERSION",
-        "DEVELOPMENT"
       ]
     },
     {
@@ -1235,7 +1230,8 @@
       "tags": [
         "ANALYSIS",
         "LEARNING",
-        "SELF"
+        "SELF",
+        "WELLNESS"
       ]
     },
     {
@@ -1544,7 +1540,8 @@
       "description": "Generate personalized messages of encouragement.",
       "tags": [
         "WRITING",
-        "SELF"
+        "SELF",
+        "WELLNESS"
       ]
     },
     {
@@ -1868,7 +1865,64 @@
       "description": "Analyze a psychological profile, pinpoint issues and strengths, and deliver compassionate, structured strategies for spiritual, mental, and life improvement.",
       "tags": [
         "ANALYSIS",
+        "SELF",
+        "WELLNESS"
+      ]
+    },
+    {
+      "patternName": "create_story_about_people_interaction",
+      "description": "Analyze two personas, compare their dynamics, and craft a realistic, character-driven story from those insights.",
+      "tags": [
+        "ANALYSIS",
+        "WRITING"
+      ]
+    },
+    {
+      "patternName": "extract_characters",
+      "description": "Identify all characters (human and non-human), resolve their aliases and pronouns into canonical names, and produce detailed descriptions of each character's role, motivations, and interactions ranked by narrative importance.",
+      "tags": [
+        "ANALYSIS",
+        "WRITING"
+      ]
+    },
+    {
+      "patternName": "fix_typos",
+      "description": "Proofreads and corrects typos, spelling, grammar, and punctuation errors.",
+      "tags": [
+        "WRITING"
+      ]
+    },
+    {
+      "patternName": "model_as_sherlock_freud",
+      "description": "Builds psychological models using detective reasoning and psychoanalytic insight.",
+      "tags": [
+        "ANALYSIS",
+        "SELF",
+        "WELLNESS"
+      ]
+    },
+    {
+      "patternName": "predict_person_actions",
+      "description": "Predicts behavioral responses based on psychological profiles and challenges",
+      "tags": [
+        "ANALYSIS",
+        "SELF",
+        "WELLNESS"
+      ]
+    },
+    {
+      "patternName": "recommend_yoga_practice",
+      "description": "Provides personalized yoga sequences, meditation guidance, and holistic lifestyle advice based on individual profiles.",
+      "tags": [
+        "WELLNESS",
         "SELF"
+      ]
+    },
+    {
+      "patternName": "create_conceptmap",
+      "description": "Transforms unstructured text or markdown content into an interactive HTML concept map using Vis.js by extracting key concepts and their logical relationships.",
+      "tags": [
+        "VISUALIZE"
       ]
     }
   ]
