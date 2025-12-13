@@ -73,6 +73,11 @@ Below are the **new features and capabilities** we've added (newest first):
 
 ### Recent Major Features
 
+- [v1.4.338](https://github.com/danielmiessler/fabric/releases/tag/v1.4.338) (Dec 4, 2025) — Add Abacus vendor support for Chat-LLM
+  models (see [RouteLLM APIs](https://abacus.ai/app/route-llm-apis)).
+- [v1.4.337](https://github.com/danielmiessler/fabric/releases/tag/v1.4.337) (Dec 4, 2025) — Add "Z AI" vendor support. See the [Z AI overview](https://docs.z.ai/guides/overview/overview) page for more details.
+- [v1.4.334](https://github.com/danielmiessler/fabric/releases/tag/v1.4.334) (Nov 26, 2025) — **Claude Opus 4.5**: Updates the Anthropic SDK to the latest and adds the new [Claude Opus 4.5](https://www.anthropic.com/news/claude-opus-4-5) to the available models.
+- [v1.4.331](https://github.com/danielmiessler/fabric/releases/tag/v1.4.331) (Nov 23, 2025) — **Support for GitHub Models**: Adds support for using GitHub Models.
 - [v1.4.322](https://github.com/danielmiessler/fabric/releases/tag/v1.4.322) (Nov 5, 2025) — **Interactive HTML Concept Maps and Claude Sonnet 4.5**: Adds `create_conceptmap` pattern for visual knowledge representation using Vis.js, introduces WELLNESS category with psychological analysis patterns, and upgrades to Claude Sonnet 4.5
 - [v1.4.317](https://github.com/danielmiessler/fabric/releases/tag/v1.4.317) (Sep 21, 2025) — **Portuguese Language Variants**: Adds BCP 47 locale normalization with support for Brazilian Portuguese (pt-BR) and European Portuguese (pt-PT) with intelligent fallback chains
 - [v1.4.314](https://github.com/danielmiessler/fabric/releases/tag/v1.4.314) (Sep 17, 2025) — **Azure OpenAI Migration**: Migrates to official `openai-go/azure` SDK with improved authentication and default API version support
