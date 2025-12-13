@@ -135,7 +135,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 			}
 			filename := filepath.Join(contextDir, "general_context.md")
 			content := fmt.Sprintf("# CONTEXT\n\nUser name: %s\nBirth Year: %s\nGender: %s\nCurrent Date: %s\nPattern name(s): %s\nThis is not a chat\n", personalName, birthYear, gender, now.Format("2006-01-02"), patternNames)
-			if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
+			if err := os.WriteFile(filename, []byte(content), 0666); err != nil {
 				log.Printf("Error writing context file %s: %v", filename, err)
 			}
 		}
@@ -434,7 +434,7 @@ func (h *ChatHandler) StoreMessage(c *gin.Context) {
 					return
 				}
 			}
-			if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
+			if err := os.WriteFile(filename, []byte(content), 0666); err != nil {
 				log.Printf("[ERROR] " + fmt.Sprintf("Error writing file %s: %v", filename, err))
 				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error writing file %s: %v", filename, err)})
 				return
