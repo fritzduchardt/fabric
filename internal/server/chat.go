@@ -67,6 +67,45 @@ func NewChatHandler(r *gin.Engine, registry *core.PluginRegistry, db *fsdb.Db) *
 	return handler
 }
 
+func (h *ChatHandler) addLinks(str string) string {
+	links := urlRegex.FindAllString(str, -1)
+	totalLinkChars := 0
+	const maxLinkChars = 500000
+	for _, link := range links {
+		if strings.HasSuffix(link, ".rss") || strings.HasSuffix(link, ".xml") || strings.HasSuffix(link, ".xml#") {
+			md, err := util.ConvertRSSFeedToMarkdown(link)
+			if totalLinkChars+len(md) > maxLinkChars {
+				continue
+			}
+			totalLinkChars += len(md)
+			if err == nil {
+				str = str + "\nRSS Feed Markdown:\n" + md
+			}
+			continue
+		}
+		if totalLinkChars >= maxLinkChars {
+			break
+		}
+		resp, err := http.Get(link)
+		if err != nil {
+			continue
+		}
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			continue
+		}
+		text := util.StripTags(string(body))
+		if totalLinkChars+len(text) > maxLinkChars {
+			continue
+		}
+		content := "URL: " + link + "\n" + text
+		str = str + "\nURL Content:\n" + content
+		totalLinkChars += len(text)
+	}
+	return str
+}
+
 func (h *ChatHandler) DeletePattern(c *gin.Context) {
 	log.Printf("[DEBUG] Entering DeletePattern handler")
 	name := c.Param("name")
@@ -156,41 +195,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 			streamChan := make(chan string)
 			go func(p PromptRequest) {
 				defer close(streamChan)
-				links := urlRegex.FindAllString(p.UserInput, -1)
-				totalLinkChars := 0
-				const maxLinkChars = 500000
-				for _, link := range links {
-					if strings.HasSuffix(link, ".rss") || strings.HasSuffix(link, ".xml") || strings.HasSuffix(link, ".xml#") {
-						md, err := util.ConvertRSSFeedToMarkdown(link)
-						if totalLinkChars+len(md) > maxLinkChars {
-							continue
-						}
-						totalLinkChars += len(md)
-						if err == nil {
-							p.UserInput = p.UserInput + "\nRSS Feed Markdown:\n" + md
-						}
-						continue
-					}
-					if totalLinkChars >= maxLinkChars {
-						break
-					}
-					resp, err := http.Get(link)
-					if err != nil {
-						continue
-					}
-					body, err := io.ReadAll(resp.Body)
-					resp.Body.Close()
-					if err != nil {
-						continue
-					}
-					text := util.StripTags(string(body))
-					if totalLinkChars+len(text) > maxLinkChars {
-						continue
-					}
-					content := "URL: " + link + "\n" + text
-					p.UserInput = p.UserInput + "\nURL Content:\n" + content
-					totalLinkChars += len(text)
-				}
+				p.UserInput = h.addLinks(p.UserInput)
 				if p.ObsidianFile == "" && p.PatternName == "protocol" {
 					paths, contents, err := readWeaviateJournal(p.UserInput)
 					if err == nil {
@@ -206,6 +211,9 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 					if obsidianFilePath != "" {
 						contentToUse, err := readObsidianFile(obsidianFilePath)
 						if err == nil {
+							if strings.Contains(contentToUse, "#followlinks") {
+								contentToUse = h.addLinks(contentToUse)
+							}
 							fileContentAmended := "FILENAME: " + p.ObsidianFile + "\n" + contentToUse
 							p.UserInput = p.UserInput + "\nJournal File:\n" + fileContentAmended
 						}
