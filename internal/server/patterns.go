@@ -7,7 +7,6 @@ import (
 	"github.com/danielmiessler/fabric/internal/plugins/db/fsdb"
 	"github.com/gin-gonic/gin"
 	"log"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
