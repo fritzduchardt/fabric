@@ -3,8 +3,10 @@ package openai
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/danielmiessler/fabric/internal/chat"
 	"github.com/danielmiessler/fabric/internal/domain"
@@ -65,6 +67,7 @@ type Client struct {
 	ApiBaseURL          *plugins.SetupQuestion
 	ApiClient           *openai.Client
 	ImplementsResponses bool // Whether this provider supports the Responses API
+	httpClient          *http.Client
 }
 
 // SetResponsesAPIEnabled configures whether to use the Responses API
@@ -79,6 +82,11 @@ func (o *Client) configure() (ret error) {
 	}
 	client := openai.NewClient(opts...)
 	o.ApiClient = &client
+
+	// Initialize HTTP client for direct API calls (reused across requests)
+	o.httpClient = &http.Client{
+		Timeout: 10 * time.Second,
+	}
 	return
 }
 
@@ -96,11 +104,11 @@ func (o *Client) ListModels() (ret []string, err error) {
 	// Some providers (e.g., GitHub Models) return non-standard response formats
 	// that the SDK fails to parse.
 	debuglog.Debug(debuglog.Basic, "SDK Models.List failed for %s: %v, falling back to direct API fetch\n", o.GetName(), err)
-	return FetchModelsDirectly(context.Background(), o.ApiBaseURL.Value, o.ApiKey.Value, o.GetName())
+	return FetchModelsDirectly(context.Background(), o.ApiBaseURL.Value, o.ApiKey.Value, o.GetName(), o.httpClient)
 }
 
 func (o *Client) SendStream(
-	msgs []*chat.ChatCompletionMessage, opts *domain.ChatOptions, channel chan string,
+	msgs []*chat.ChatCompletionMessage, opts *domain.ChatOptions, channel chan domain.StreamUpdate,
 ) (err error) {
 	// Use Responses API for OpenAI, Chat Completions API for other providers
 	if o.supportsResponsesAPI() {
@@ -110,7 +118,7 @@ func (o *Client) SendStream(
 }
 
 func (o *Client) sendStreamResponses(
-	msgs []*chat.ChatCompletionMessage, opts *domain.ChatOptions, channel chan string,
+	msgs []*chat.ChatCompletionMessage, opts *domain.ChatOptions, channel chan domain.StreamUpdate,
 ) (err error) {
 	defer close(channel)
 
@@ -120,7 +128,10 @@ func (o *Client) sendStreamResponses(
 		event := stream.Current()
 		switch event.Type {
 		case string(constant.ResponseOutputTextDelta("").Default()):
-			channel <- event.AsResponseOutputTextDelta().Delta
+			channel <- domain.StreamUpdate{
+				Type:    domain.StreamTypeContent,
+				Content: event.AsResponseOutputTextDelta().Delta,
+			}
 		case string(constant.ResponseOutputTextDone("").Default()):
 			// The Responses API sends the full text again in the
 			// final "done" event. Since we've already streamed all
@@ -130,7 +141,10 @@ func (o *Client) sendStreamResponses(
 		}
 	}
 	if stream.Err() == nil {
-		channel <- "\n"
+		channel <- domain.StreamUpdate{
+			Type:    domain.StreamTypeContent,
+			Content: "\n",
+		}
 	}
 	return stream.Err()
 }

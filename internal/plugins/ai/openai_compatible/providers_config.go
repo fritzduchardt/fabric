@@ -47,7 +47,7 @@ func (c *Client) ListModels() ([]string, error) {
 		}
 		// TODO: Handle context properly in Fabric by accepting and propagating a context.Context
 		// instead of creating a new one here.
-		return openai.FetchModelsDirectly(context.Background(), c.modelsURL, c.Client.ApiKey.Value, c.GetName())
+		return openai.FetchModelsDirectly(context.Background(), c.modelsURL, c.Client.ApiKey.Value, c.GetName(), nil)
 	}
 
 	// First try the standard OpenAI SDK approach
@@ -163,6 +163,11 @@ var ProviderMap = map[string]ProviderConfig{
 	"LiteLLM": {
 		Name:                "LiteLLM",
 		BaseURL:             "http://localhost:4000",
+		ImplementsResponses: false,
+	},
+	"MiniMax": {
+		Name:                "MiniMax",
+		BaseURL:             "https://api.minimaxi.com/v1",
 		ImplementsResponses: false,
 	},
 	"Mistral": {

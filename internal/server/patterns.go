@@ -1,6 +1,9 @@
 package restapi
 
 import (
+	"maps"
+	"net/http"
+
 	"github.com/danielmiessler/fabric/internal/plugins/db/fsdb"
 	"github.com/gin-gonic/gin"
 	"log"
@@ -121,6 +124,16 @@ func (h *PatternsHandler) GeneratePatterns(c *gin.Context) {
 }
 
 // Get handles the GET /patterns/:name route - returns raw pattern without variable processing
+// @Summary Get a pattern
+// @Description Retrieve a pattern by name
+// @Tags patterns
+// @Accept json
+// @Produce json
+// @Param name path string true "Pattern name"
+// @Success 200 {object} fsdb.Pattern
+// @Failure 500 {object} map[string]string
+// @Security ApiKeyAuth
+// @Router /patterns/{name} [get]
 func (h *PatternsHandler) Get(c *gin.Context) {
 	name := c.Param("name")
 
@@ -147,6 +160,18 @@ type PatternApplyRequest struct {
 }
 
 // ApplyPattern handles the POST /patterns/:name/apply route
+// @Summary Apply pattern with variables
+// @Description Apply a pattern with variable substitution
+// @Tags patterns
+// @Accept json
+// @Produce json
+// @Param name path string true "Pattern name"
+// @Param request body PatternApplyRequest true "Pattern application request"
+// @Success 200 {object} fsdb.Pattern
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Security ApiKeyAuth
+// @Router /patterns/{name}/apply [post]
 func (h *PatternsHandler) ApplyPattern(c *gin.Context) {
 	name := c.Param("name")
 
@@ -163,9 +188,7 @@ func (h *PatternsHandler) ApplyPattern(c *gin.Context) {
 			variables[key] = values[0]
 		}
 	}
-	for key, value := range request.Variables {
-		variables[key] = value
-	}
+	maps.Copy(variables, request.Variables)
 
 	pattern, err := h.patterns.GetApplyVariables(name, variables, request.Input)
 	if err != nil {
