@@ -15,6 +15,8 @@ import (
 	"github.com/danielmiessler/fabric/internal/plugins/ai/anthropic"
 	"github.com/danielmiessler/fabric/internal/plugins/ai/azure"
 	"github.com/danielmiessler/fabric/internal/plugins/ai/bedrock"
+	"github.com/danielmiessler/fabric/internal/plugins/ai/copilot"
+	"github.com/danielmiessler/fabric/internal/plugins/ai/digitalocean"
 	"github.com/danielmiessler/fabric/internal/plugins/ai/dryrun"
 	"github.com/danielmiessler/fabric/internal/plugins/ai/exolab"
 	"github.com/danielmiessler/fabric/internal/plugins/ai/gemini"
@@ -36,6 +38,7 @@ import (
 	"github.com/danielmiessler/fabric/internal/tools/custom_patterns"
 	"github.com/danielmiessler/fabric/internal/tools/jina"
 	"github.com/danielmiessler/fabric/internal/tools/lang"
+	"github.com/danielmiessler/fabric/internal/tools/spotify"
 	"github.com/danielmiessler/fabric/internal/tools/youtube"
 	"github.com/danielmiessler/fabric/internal/util"
 )
@@ -81,6 +84,7 @@ func NewPluginRegistry(db *fsdb.Db) (ret *PluginRegistry, err error) {
 		YouTube:        youtube.NewYouTube(),
 		Language:       lang.NewLanguage(),
 		Jina:           jina.NewClient(),
+		Spotify:        spotify.NewSpotify(),
 		Strategies:     strategy.NewStrategiesManager(),
 	}
 
@@ -98,6 +102,7 @@ func NewPluginRegistry(db *fsdb.Db) (ret *PluginRegistry, err error) {
 	// Add non-OpenAI compatible clients
 	vendors = append(vendors,
 		openai.NewClient(),
+		digitalocean.NewClient(),
 		ollama.NewClient(),
 		azure.NewClient(),
 		gemini.NewClient(),
@@ -105,7 +110,8 @@ func NewPluginRegistry(db *fsdb.Db) (ret *PluginRegistry, err error) {
 		vertexai.NewClient(),
 		lmstudio.NewClient(),
 		exolab.NewClient(),
-		perplexity.NewClient(), // Added Perplexity client
+		perplexity.NewClient(),
+		copilot.NewClient(), // Microsoft 365 Copilot
 	)
 
 	if hasAWSCredentials() {
@@ -152,6 +158,7 @@ type PluginRegistry struct {
 	YouTube            *youtube.YouTube
 	Language           *lang.Language
 	Jina               *jina.Client
+	Spotify            *spotify.Spotify
 	TemplateExtensions *template.ExtensionManager
 	Strategies         *strategy.StrategiesManager
 }
@@ -171,6 +178,7 @@ func (o *PluginRegistry) SaveEnvFile() (err error) {
 
 	o.YouTube.SetupFillEnvFileContent(&envFileContent)
 	o.Jina.SetupFillEnvFileContent(&envFileContent)
+	o.Spotify.SetupFillEnvFileContent(&envFileContent)
 	o.Language.SetupFillEnvFileContent(&envFileContent)
 
 	err = o.Db.SaveEnv(envFileContent.String())
@@ -344,7 +352,7 @@ func (o *PluginRegistry) runInteractiveSetup() (err error) {
 	groupsPlugins.AddGroupItems(i18n.T("setup_required_tools"), o.Defaults, o.PatternsLoader, o.Strategies)
 
 	// Add optional tools
-	groupsPlugins.AddGroupItems(i18n.T("setup_optional_configuration_header"), o.CustomPatterns, o.Jina, o.Language, o.YouTube)
+	groupsPlugins.AddGroupItems(i18n.T("setup_optional_configuration_header"), o.CustomPatterns, o.Jina, o.Language, o.Spotify, o.YouTube)
 
 	for {
 		groupsPlugins.Print(false)
@@ -485,9 +493,10 @@ func (o *PluginRegistry) Configure() (err error) {
 		o.PatternsLoader.Patterns.CustomPatternsDir = customPatternsDir
 	}
 
-	//YouTube and Jina are not mandatory, so ignore not configured error
+	//YouTube, Jina, Spotify are not mandatory, so ignore not configured error
 	_ = o.YouTube.Configure()
 	_ = o.Jina.Configure()
+	_ = o.Spotify.Configure()
 	_ = o.Language.Configure()
 	return
 }

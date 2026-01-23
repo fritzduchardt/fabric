@@ -58,6 +58,10 @@ Format predictions for tracking/verification in markdown prediction logs.
 
 Extract insights from AI agent interactions, focusing on learning.
 
+### greybeard_secure_prompt_engineer
+
+Create secure, production-grade system prompts with injection test suites and evaluation rubrics.
+
 ### improve_prompt
 
 Enhance AI prompts by refining clarity and specificity.
@@ -490,6 +494,10 @@ Extract pure wisdom from content without metadata.
 
 Extract condensed  insightful ideas and recommendations focusing on life wisdom.
 
+### extract_wisdom_with_attribution
+
+Extract insightful ideas and recommendations with speaker attribution for quotes.
+
 ### t_extract_intro_sentences
 
 Extract intro sentences to identify engagement strategies.
@@ -833,6 +841,10 @@ Create narratives for security program improvements in remediation efficiency.
 ### extract_ctf_writeup
 
 Extract techniques from CTF writeups to create learning resources.
+
+### greybeard_secure_prompt_engineer
+
+Create secure, production-grade system prompts with injection test suites and evaluation rubrics.
 
 ### improve_report_finding
 

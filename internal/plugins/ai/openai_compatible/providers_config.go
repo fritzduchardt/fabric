@@ -145,6 +145,11 @@ var ProviderMap = map[string]ProviderConfig{
 		ModelsURL:           "https://models.github.ai/catalog", // FetchModelsDirectly will append /models
 		ImplementsResponses: false,
 	},
+	"Infermatic": {
+		Name:                "Infermatic",
+		BaseURL:             "https://api.totalgpt.ai/v1",
+		ImplementsResponses: false,
+	},
 	"GrokAI": {
 		Name:                "GrokAI",
 		BaseURL:             "https://api.x.ai/v1",
@@ -173,6 +178,11 @@ var ProviderMap = map[string]ProviderConfig{
 	"Mistral": {
 		Name:                "Mistral",
 		BaseURL:             "https://api.mistral.ai/v1",
+		ImplementsResponses: false,
+	},
+	"Novita AI": {
+		Name:                "Novita AI",
+		BaseURL:             "https://api.novita.ai/openai/v1",
 		ImplementsResponses: false,
 	},
 	"OpenRouter": {
@@ -204,6 +214,11 @@ var ProviderMap = map[string]ProviderConfig{
 		Name:                "Abacus",
 		BaseURL:             "https://routellm.abacus.ai/v1/",
 		ModelsURL:           "static:abacus", // Special marker for static model list
+		ImplementsResponses: false,
+	},
+	"Mammouth": {
+		Name:                "Mammouth",
+		BaseURL:             "https://api.mammouth.ai/v1",
 		ImplementsResponses: false,
 	},
 }

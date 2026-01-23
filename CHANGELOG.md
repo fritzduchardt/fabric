@@ -1,5 +1,178 @@
 # Changelog
 
+## v1.4.389 (2026-01-23)
+
+### PR [#1960](https://github.com/danielmiessler/Fabric/pull/1960) by [ksylvan](https://github.com/ksylvan): fix: consume all positional arguments as input
+
+- Fix: consume all positional arguments as input by joining all positional arguments with spaces instead of using only the last argument, allowing commands to process entire phrases correctly
+
+## v1.4.388 (2026-01-23)
+
+### PR [#1957](https://github.com/danielmiessler/Fabric/pull/1957) by [ksylvan](https://github.com/ksylvan): Add Novita AI as a new OpenAI-compatible provider
+
+- Add Novita AI as a new OpenAI-compatible provider
+- Add Novita AI provider configuration with API endpoint
+- Update README to include Novita AI in supported providers list
+- Configure Novita AI to use OpenAI-compatible interface
+
+## v1.4.387 (2026-01-21)
+
+### PR [#1950](https://github.com/danielmiessler/Fabric/pull/1950) by [cleong14](https://github.com/cleong14): feat: add suggest_gt_command pattern
+
+- Added new suggest_gt_command pattern that suggests Gas Town (gt) CLI commands based on natural language descriptions
+- Covers 85+ commands across work management, agents, communication, services, diagnostics, and recovery
+- Includes pipe-friendly output with raw command on first line for easy command extraction
+- Integrates with Gas Town CLI tool for enhanced command-line workflow automation
+
+### PR [#1951](https://github.com/danielmiessler/Fabric/pull/1951) by [ksylvan](https://github.com/ksylvan): Add `extract_wisdom_with_attribution` pattern for speaker-attributed quotes
+
+- Add new `extract_wisdom_with_attribution` pattern that extends `extract_wisdom` functionality with speaker attribution capabilities
+- Create comprehensive documentation including README and system.md files for the new pattern
+- Update pattern_explanations.md with detailed entry for the new pattern
+- Add pattern to suggest_pattern category lists for improved discoverability
+- Update pattern metadata files including pattern_descriptions.json and pattern_extracts.json with relevant tags and content
+
+### PR [#1952](https://github.com/danielmiessler/Fabric/pull/1952) by [ksylvan](https://github.com/ksylvan): Fix: using attachments with Anthropic models
+
+- Feat: add multi-content support for images and PDFs in Anthropic client
+- Update toMessages to handle multi-content messages with text and attachments
+- Add contentBlocksFromMessage to convert message parts to Anthropic blocks
+- Implement support for image URLs including data URLs and base64 images
+- Add PDF attachment handling via data URLs and URL-based PDFs
+
+## v1.4.386 (2026-01-21)
+
+### PR [#1945](https://github.com/danielmiessler/Fabric/pull/1945) by [ksylvan](https://github.com/ksylvan): feat: Add Spotify API integration for podcast metadata retrieval
+
+- Add Spotify metadata retrieval via --spotify flag
+- Add Spotify plugin with OAuth token handling and metadata
+- Wire --spotify flag into CLI processing and output
+- Register Spotify in plugin setup, env, and registry
+- Update shell completions to include --spotify option
+
+## v1.4.385 (2026-01-20)
+
+### PR [#1947](https://github.com/danielmiessler/Fabric/pull/1947) by [cleong14](https://github.com/cleong14): feat(patterns): add extract_bd_ideas pattern
+
+- Added extract_bd_ideas pattern that extracts actionable ideas from content and transforms them into well-structured bd issue tracker commands
+- Implemented identification system for tasks, problems, ideas, improvements, bugs, and features
+- Added actionability evaluation and appropriate scoping functionality
+- Integrated priority assignment system (P0-P4) with relevant labels
+- Created ready-to-execute bd create commands output format
+
+### PR [#1948](https://github.com/danielmiessler/Fabric/pull/1948) by [cleong14](https://github.com/cleong14): feat(patterns): add create_bd_issue pattern
+
+- Added create_bd_issue pattern that transforms natural language issue descriptions into optimal bd (Beads) issue tracker commands
+- Implemented comprehensive bd create flag reference for better command generation
+- Added intelligent type detection system that automatically categorizes issues as bug, feature, task, epic, or chore
+- Included priority assessment capability that assigns P0-P4 priority levels based on urgency signals in descriptions
+- Integrated smart label selection feature that automatically chooses 1-4 relevant labels for each issue
+
+### PR [#1949](https://github.com/danielmiessler/Fabric/pull/1949) by [ksylvan](https://github.com/ksylvan): Fix #1931 - Image Generation Feature should warn if the model is not capable of Image Generation
+
+- Add image generation compatibility warnings for unsupported models
+- Add warning to stderr when using incompatible models with image generation
+- Add GPT-5, GPT-5-nano, and GPT-5.2 to supported image generation models
+- Create `checkImageGenerationCompatibility` function in OpenAI plugin
+- Add comprehensive tests for image generation compatibility warnings
+
+## v1.4.384 (2026-01-19)
+
+### PR [#1944](https://github.com/danielmiessler/Fabric/pull/1944) by [ksylvan](https://github.com/ksylvan): Add Infermatic AI Provider Support
+
+- Add Infermatic provider to ProviderMap as part of Phase 1 implementation for issue #1033
+- Add test coverage for the Infermatic AI provider in TestCreateClient to verify provider exists and creates valid client
+- Replace go-git status API with native `git status --porcelain` command to fix worktree compatibility issues
+- Simplify `IsWorkingDirectoryClean` and `GetStatusDetails` functions to use CLI output parsing instead of go-git library
+- Use native `git rev-parse HEAD` to get commit hash after commit and remove unused imports from walker.go
+
+## v1.4.383 (2026-01-18)
+
+### PR [#1943](https://github.com/danielmiessler/Fabric/pull/1943) by [ksylvan](https://github.com/ksylvan): fix: Ollama server now respects the default context window
+
+- Fix: Ollama server now respects the default context window instead of using hardcoded 2048 tokens
+- Add parseOllamaNumCtx() function with type-safe extraction supporting 6 numeric types and platform-aware integer overflow protection
+- Extract num_ctx from client request options and add ModelContextLength field to ChatRequest struct
+- Implement DoS protection via 1,000,000 token maximum limit with sanitized error messages
+- Add comprehensive unit tests for parseOllamaNumCtx function covering edge cases including overflow and invalid types
+
+## v1.4.382 (2026-01-17)
+
+### PR [#1941](https://github.com/danielmiessler/Fabric/pull/1941) by [ksylvan](https://github.com/ksylvan): Add `greybeard_secure_prompt_engineer` to metadata, also remove duplicate json data file
+
+- Add greybeard_secure_prompt_engineer pattern to metadata (pattern explanations and json index)
+- Refactor build process to use npm hooks for copying JSON files instead of manual copying
+- Update .gitignore to exclude generated data and tmp directories
+- Modify suggest_pattern categories to include new security pattern
+- Delete redundant web static data file and rely on build hooks
+
+## v1.4.381 (2026-01-17)
+
+### PR [#1940](https://github.com/danielmiessler/Fabric/pull/1940) by [ksylvan](https://github.com/ksylvan): Rewrite Ollama chat handler to support proper streaming responses
+
+- Refactor Ollama chat handler to support proper streaming responses with real-time SSE data parsing
+- Replace single-read body parsing with streaming bufio.Scanner approach and implement writeOllamaResponse helper function
+- Add comprehensive error handling improvements including proper HTTP error responses instead of log.Fatal to prevent server crashes
+- Fix upstream error handling to return stringified error payloads and validate Fabric chat URL hosts
+- Implement proper request context propagation and align duration fields to int64 nanosecond precision for consistency
+
+## v1.4.380 (2026-01-16)
+
+### PR [#1936](https://github.com/danielmiessler/Fabric/pull/1936) by [ksylvan](https://github.com/ksylvan): New Vendor: Microsoft Copilot
+
+- Add Microsoft 365 Copilot integration as a new AI vendor with OAuth2 authentication for delegated user permissions
+- Enable querying of Microsoft 365 data including emails, documents, and chats with both synchronous and streaming response support
+- Provide comprehensive setup instructions for Azure AD app registration and detail licensing, technical, and permission requirements
+- Add troubleshooting steps for common authentication and API errors with current API limitations documentation
+- Fix SendStream interface to use domain.StreamUpdate instead of chan string to match current Vendor interface requirements
+
+## v1.4.379 (2026-01-15)
+
+### PR [#1935](https://github.com/danielmiessler/Fabric/pull/1935) by [dependabot](https://github.com/apps/dependabot): chore(deps): bump the npm_and_yarn group across 1 directory with 2 updates
+
+- Updated @sveltejs/kit from version 2.21.1 to 2.49.5
+- Updated devalue dependency from version 5.3.2 to 5.6.2
+
+## v1.4.378 (2026-01-14)
+
+### PR [#1933](https://github.com/danielmiessler/Fabric/pull/1933) by [ksylvan](https://github.com/ksylvan): Add DigitalOcean Gradient AI support
+
+- Feat: add DigitalOcean Gradient AI Agents as a new vendor
+- Add DigitalOcean as a new AI provider in plugin registry
+- Implement DigitalOcean client with OpenAI-compatible inference endpoint
+- Support model access key authentication for inference requests
+- Add optional control plane token for model discovery
+
+### Direct commits
+
+- Chore: Update README with a links to other docs
+
+## v1.4.377 (2026-01-12)
+
+### PR [#1929](https://github.com/danielmiessler/Fabric/pull/1929) by [ksylvan](https://github.com/ksylvan): Add Mammouth as new OpenAI-compatible AI provider
+
+- Feat: add Mammouth as new OpenAI-compatible AI provider
+- Add Mammouth provider configuration with API base URL
+- Configure Mammouth to use standard OpenAI-compatible interface
+- Disable Responses API implementation for Mammouth provider
+- Add "Mammouth" to VSCode spell check dictionary
+
+## v1.4.376 (2026-01-12)
+
+### PR [#1928](https://github.com/danielmiessler/Fabric/pull/1928) by [ksylvan](https://github.com/ksylvan): Eliminate repetitive boilerplate across eight vendor implementations
+
+- Refactor: add NewVendorPluginBase factory function to reduce duplication
+- Update 8 vendor files (anthropic, bedrock, gemini, lmstudio, ollama, openai, perplexity, vertexai) to use the factory function
+- Add 3 test cases for the new factory function
+- Add centralized factory function for AI vendor plugin initialization
+- Chore: exempt json files from VSCode format-on-save
+
+### Direct commits
+
+- Docs: Add GitHub sponsor section to README
+I spend hundreds of hours a year on open source. If you'd like to help support this project, you can sponsor me here.
+Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
+
 ## v1.4.375 (2026-01-08)
 
 ### PR [#1925](https://github.com/danielmiessler/Fabric/pull/1925) by [ksylvan](https://github.com/ksylvan): docs: update README to document new AI providers and features

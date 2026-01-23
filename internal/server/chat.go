@@ -45,9 +45,10 @@ type PromptRequest struct {
 }
 
 type ChatRequest struct {
-	Prompts  []PromptRequest `json:"prompts"`
-	Language string          `json:"language"`
-	domain.ChatOptions
+	Prompts            []PromptRequest `json:"prompts"`
+	Language           string          `json:"language"`
+	ModelContextLength int             `json:"modelContextLength,omitempty"` // Context window size
+	domain.ChatOptions                 // Embed the ChatOptions from common package
 }
 
 type StreamResponse struct {
@@ -220,7 +221,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 						}
 					}
 				}
-				chatter, err := h.registry.GetChatter(p.Model, 2048, p.Vendor, "", false, false)
+				chatter, err := h.registry.GetChatter(p.Model, request.ModelContextLength, p.Vendor, "", false, false)
 				if err != nil {
 					streamChan <- fmt.Sprintf("Error: %v", err)
 					return
