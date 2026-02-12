@@ -197,11 +197,11 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 						newPattern := filepath.Base(filepath.Dir(path))
 						p.PatternName = newPattern
 						prompt.PatternName = p.PatternName
-						log.Printf("Find new pattern with weaviate: %s", newPattern)
+						log.Printf("Found new pattern with weaviate: %s", newPattern)
 					} else {
 						p.PatternName = "general"
 						prompt.PatternName = p.PatternName
-						log.Printf("Find no pattern with weaviate. Defaulting to general")
+						log.Printf("Found no pattern with weaviate. Defaulting to general")
 					}
 				}
 

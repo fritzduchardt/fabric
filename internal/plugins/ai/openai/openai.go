@@ -175,14 +175,13 @@ func (o *Client) sendResponses(ctx context.Context, msgs []*chat.ChatCompletionM
 	if opts.ImageFile != "" && !supportsImageGeneration(opts.Model) {
 		return "", fmt.Errorf("model '%s' does not support image generation. Supported models: %s", opts.Model, strings.Join(ImageGenerationSupportedModels, ", "))
 	}
+	req := o.buildResponseParams(msgs, opts)
 
 	mcpClient, tools, err := mcpclient.GetClient(os.Getenv("MCP_SERVER"))
-	if err != nil {
-		return "", err
+	if err == nil {
+		toolParams := getTools(tools)
+		req.Tools = toolParams
 	}
-	toolParams := getTools(tools)
-	req := o.buildResponseParams(msgs, opts)
-	req.Tools = toolParams
 
 	var resp *responses.Response
 	if resp, err = o.ApiClient.Responses.New(ctx, req); err != nil {
