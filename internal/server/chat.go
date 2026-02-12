@@ -1,9 +1,19 @@
 package restapi
 
 import (
-	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+
+	"github.com/danielmiessler/fabric/internal/chat"
+	"github.com/danielmiessler/fabric/internal/core"
+	"github.com/danielmiessler/fabric/internal/domain"
+	"github.com/danielmiessler/fabric/internal/plugins/db/fsdb"
+	"github.com/danielmiessler/fabric/internal/util"
+	"github.com/danielmiessler/fabric/internal/weaviateclient"
+	_ "github.com/weaviate/weaviate-go-client/v5/weaviate"
+	"github.com/weaviate/weaviate-go-client/v5/weaviate/graphql"
+
 	"io"
 	"log"
 	"net/http"
@@ -14,11 +24,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/danielmiessler/fabric/internal/chat"
-	"github.com/danielmiessler/fabric/internal/core"
-	"github.com/danielmiessler/fabric/internal/domain"
-	"github.com/danielmiessler/fabric/internal/plugins/db/fsdb"
-	"github.com/danielmiessler/fabric/internal/util"
 	"github.com/gin-gonic/gin"
 )
 
@@ -145,42 +150,6 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 		return
 	}
 	log.Printf("[DEBUG] Chat request bound successfully: %+v", request)
-	fabricHome := os.Getenv("FABRIC_CONFIG_HOME")
-	if fabricHome == "" {
-		log.Printf("FABRIC_CONFIG_HOME not set, skipping context file write")
-	} else {
-		contextDir := filepath.Join(fabricHome, "contexts")
-		if err := os.MkdirAll(contextDir, 0755); err != nil {
-			log.Printf("Error creating context directory %s: %v", contextDir, err)
-		} else {
-			var patternSet = make(map[string]bool)
-			for _, p := range request.Prompts {
-				if p.PatternName != "" {
-					patternSet[p.PatternName] = true
-				}
-			}
-			var patternNamesSlice []string
-			for name := range patternSet {
-				patternNamesSlice = append(patternNamesSlice, name)
-			}
-			patternNames := strings.Join(patternNamesSlice, ", ")
-			now := time.Now()
-			personalName := os.Getenv("PERSONAL_NAME")
-			birthYear := os.Getenv("BIRTH_YEAR")
-			gender := os.Getenv("GENDER")
-			currentModel := strings.ReplaceAll(request.Prompts[0].Model, ".", "-")
-			if personalName == "" {
-				personalName = "Fritz"
-				birthYear = "1976"
-				gender = "male"
-			}
-			filename := filepath.Join(contextDir, "general_context.md")
-			content := fmt.Sprintf("# CONTEXT\n\nCurrent model: %s\nUser name: %s\nBirth Year: %s\nGender: %s\nCurrent Date: %s\nPattern name(s): %s\nThis is not a chat\n", currentModel, personalName, birthYear, gender, now.Format("2006-01-02"), patternNames)
-			if err := os.WriteFile(filename, []byte(content), 0666); err != nil {
-				log.Printf("Error writing context file %s: %v", filename, err)
-			}
-		}
-	}
 	log.Printf("Received chat request - Language: '%s', Prompts: %d", request.Language, len(request.Prompts))
 	c.Writer.Header().Set("Content-Type", "text/readystream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
@@ -224,10 +193,43 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 						log.Printf("Error reading weaviate pattern: %v", err)
 						return
 					}
-					newPattern := filepath.Base(filepath.Dir(path))
-					p.PatternName = newPattern
-					prompt.PatternName = p.PatternName
-					log.Printf("Find new pattern with weaviate: %s", newPattern)
+					if path != "" {
+						newPattern := filepath.Base(filepath.Dir(path))
+						p.PatternName = newPattern
+						prompt.PatternName = p.PatternName
+						log.Printf("Find new pattern with weaviate: %s", newPattern)
+					} else {
+						p.PatternName = "general"
+						prompt.PatternName = p.PatternName
+						log.Printf("Find no pattern with weaviate. Defaulting to general")
+					}
+				}
+
+				// write context
+				fabricHome := os.Getenv("FABRIC_CONFIG_HOME")
+				if fabricHome == "" {
+					log.Printf("FABRIC_CONFIG_HOME not set, skipping context file write")
+				} else {
+					contextDir := filepath.Join(fabricHome, "contexts")
+					if err := os.MkdirAll(contextDir, 0755); err != nil {
+						log.Printf("Error creating context directory %s: %v", contextDir, err)
+					} else {
+						now := time.Now()
+						personalName := os.Getenv("PERSONAL_NAME")
+						birthYear := os.Getenv("BIRTH_YEAR")
+						gender := os.Getenv("GENDER")
+						currentModel := strings.ReplaceAll(request.Prompts[0].Model, ".", "-")
+						if personalName == "" {
+							personalName = "Fritz"
+							birthYear = "1976"
+							gender = "male"
+						}
+						filename := filepath.Join(contextDir, "general_context.md")
+						content := fmt.Sprintf("# CONTEXT\n\nCurrent model: %s\nUser name: %s\nBirth Year: %s\nGender: %s\nCurrent Date: %s\nPattern name(s): %s\nThis is not a chat\n", currentModel, personalName, birthYear, gender, now.Format("2006-01-02"), p.PatternName)
+						if err := os.WriteFile(filename, []byte(content), 0666); err != nil {
+							log.Printf("Error writing context file %s: %v", filename, err)
+						}
+					}
 				}
 
 				chatReq := &domain.ChatRequest{
@@ -293,90 +295,46 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 }
 
 func readWeaviatePattern(prompt string) (string, error) {
-	log.Printf("[DEBUG] Entering readWeaviatePattern")
-	endpoint := os.Getenv("WEAVIATE_URL")
-	certainty := os.Getenv("WEAVIATE_CERTAINTY")
-	className := os.Getenv("WEAVIATE_CLASS")
-	if endpoint == "" {
-		return "", fmt.Errorf("WEAVIATE_URL not set")
+	certainty, err := strconv.ParseFloat(os.Getenv("WEAVIATE_CERTAINTY"), 32)
+	if err != nil {
+		return "", err
 	}
+	className := os.Getenv("WEAVIATE_CLASS")
 	if className == "" {
 		return "", fmt.Errorf("WEAVIATE_CLASS not set")
 	}
-	endpoint = strings.TrimRight(endpoint, "/") + "/v1/graphql"
-	escapedPrompt := strings.ReplaceAll(prompt, `"`, `\"`)
-	query := fmt.Sprintf(`{ Get { %s(limit: 1, hybrid: {query: "%s", alpha: %s}) { path content } } }`, className, escapedPrompt, certainty)
-	payload := map[string]string{"query": query}
-	bs, err := json.Marshal(payload)
+
+	weaviateClient, err := weaviateclient.GetClient()
 	if err != nil {
 		return "", err
 	}
-	req, err := http.NewRequest("POST", endpoint, bytes.NewReader(bs))
+	response, err := weaviateClient.GraphQL().Get().
+		WithClassName(className).
+		WithFields(
+			graphql.Field{Name: "path"},
+			graphql.Field{
+				Name: "_additional",
+				Fields: []graphql.Field{
+					{Name: "distance"},
+				},
+			},
+		).
+		WithNearText(weaviateClient.GraphQL().NearTextArgBuilder().
+			WithDistance(float32(certainty)).
+			WithConcepts([]string{prompt})).
+		WithLimit(2).
+		Do(context.Background())
+
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{Timeout: 20 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
+	results := response.Data["Get"].(map[string]interface{})
+	patternFiles := results["PatternFile"].([]interface{})
+	if len(patternFiles) == 0 {
+		return "", nil
 	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-	if resp.StatusCode >= 400 {
-		return "", fmt.Errorf("weaviate returned status %d: %s", resp.StatusCode, string(body))
-	}
-	var parsed any
-	if err := json.Unmarshal(body, &parsed); err != nil {
-		return "", err
-	}
-	m, ok := parsed.(map[string]any)
-	if !ok {
-		return "", fmt.Errorf("invalid response format: %s", string(body))
-	}
-	if errs, ok := m["errors"]; ok {
-		if arr, ok := errs.([]any); ok && len(arr) > 0 {
-			var sbErr strings.Builder
-			for _, e := range arr {
-				b, _ := json.Marshal(e)
-				sbErr.Write(b)
-				sbErr.WriteString("\n")
-			}
-			return "", fmt.Errorf("weaviate graphql errors: %s", strings.TrimSpace(sbErr.String()))
-		}
-	}
-	data, ok := m["data"].(map[string]any)
-	if !ok {
-		return "", fmt.Errorf("Data missing from output: %s", string(body))
-	}
-	get, ok := data["Get"].(map[string]any)
-	if !ok {
-		return "", fmt.Errorf("Get missing from output: %s", string(body))
-	}
-	resultsRaw, ok := get[className]
-	if !ok {
-		return "", fmt.Errorf("Results missing for class %s", className)
-	}
-	arr, ok := resultsRaw.([]any)
-	if !ok {
-		return "", fmt.Errorf("Unexpected result type for class %s", className)
-	}
-	var path string
-	for _, item := range arr {
-		if itm, ok := item.(map[string]any); ok {
-			var p string
-			if v, ok := itm["path"]; ok {
-				if ps, ok := v.(string); ok {
-					p = ps
-				}
-			}
-			path = p
-			break
-		}
-	}
+	patternFile := patternFiles[0].(map[string]interface{})
+	path := patternFile["path"].(string)
 	return path, nil
 }
 
