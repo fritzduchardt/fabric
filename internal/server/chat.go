@@ -198,17 +198,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 			go func(p PromptRequest) {
 				defer close(streamChan)
 				p.UserInput = h.addLinks(p.UserInput)
-				if p.ObsidianFile == "" && p.PatternName == "protocol" {
-					paths, contents, err := readWeaviateJournal(p.UserInput)
-					if err == nil {
-						for idx, path := range paths {
-							contentToUse := contents[idx]
-							fileContentAmended := "FILENAME: " + path + "\n" + contentToUse
-							p.UserInput = p.UserInput + "\nJournal File:\n" + fileContentAmended
-							log.Printf("[INFO] Added content from weaviate (path: %s)", path)
-						}
-					}
-				} else if p.ObsidianFile != "" {
+				if p.ObsidianFile != "" {
 					obsidianFilePath := util.ObsidianPath(p.ObsidianFile)
 					if obsidianFilePath != "" {
 						contentToUse, err := readObsidianFile(obsidianFilePath)
@@ -226,8 +216,25 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 					streamChan <- fmt.Sprintf("Error: %v", err)
 					return
 				}
+
+				// first check whether prompt is determined by weaviate
+				if p.PatternName == "weaviate" {
+					path, err := readWeaviatePattern(p.UserInput)
+					if err != nil {
+						log.Printf("Error reading weaviate pattern: %v", err)
+						return
+					}
+					newPattern := filepath.Base(filepath.Dir(path))
+					p.PatternName = newPattern
+					prompt.PatternName = p.PatternName
+					log.Printf("Find new pattern with weaviate: %s", newPattern)
+				}
+
 				chatReq := &domain.ChatRequest{
-					Message:          &chat.ChatCompletionMessage{Role: "user", Content: p.UserInput},
+					Message: &chat.ChatCompletionMessage{
+						Role:    "user",
+						Content: p.UserInput,
+					},
 					PatternName:      p.PatternName,
 					ContextName:      p.ContextName,
 					PatternVariables: p.Variables,
@@ -258,6 +265,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 					streamChan <- "Error: No response content"
 				}
 			}(prompt)
+
 			for content := range streamChan {
 				select {
 				case <-clientGone:
@@ -270,6 +278,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 						detectedFormat := detectFormat(content)
 						response = StreamResponse{Type: "content", Format: detectedFormat, Content: content}
 					}
+					response.Format = "{pattern:" + prompt.PatternName + ",model:" + prompt.Model + "}"
 					if err := writeSSEResponse(c.Writer, response); err != nil {
 						return
 					}
@@ -281,6 +290,94 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 			}
 		}
 	}
+}
+
+func readWeaviatePattern(prompt string) (string, error) {
+	log.Printf("[DEBUG] Entering readWeaviatePattern")
+	endpoint := os.Getenv("WEAVIATE_URL")
+	certainty := os.Getenv("WEAVIATE_CERTAINTY")
+	className := os.Getenv("WEAVIATE_CLASS")
+	if endpoint == "" {
+		return "", fmt.Errorf("WEAVIATE_URL not set")
+	}
+	if className == "" {
+		return "", fmt.Errorf("WEAVIATE_CLASS not set")
+	}
+	endpoint = strings.TrimRight(endpoint, "/") + "/v1/graphql"
+	escapedPrompt := strings.ReplaceAll(prompt, `"`, `\"`)
+	query := fmt.Sprintf(`{ Get { %s(limit: 1, hybrid: {query: "%s", alpha: %s}) { path content } } }`, className, escapedPrompt, certainty)
+	payload := map[string]string{"query": query}
+	bs, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	req, err := http.NewRequest("POST", endpoint, bytes.NewReader(bs))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{Timeout: 20 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("weaviate returned status %d: %s", resp.StatusCode, string(body))
+	}
+	var parsed any
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return "", err
+	}
+	m, ok := parsed.(map[string]any)
+	if !ok {
+		return "", fmt.Errorf("invalid response format: %s", string(body))
+	}
+	if errs, ok := m["errors"]; ok {
+		if arr, ok := errs.([]any); ok && len(arr) > 0 {
+			var sbErr strings.Builder
+			for _, e := range arr {
+				b, _ := json.Marshal(e)
+				sbErr.Write(b)
+				sbErr.WriteString("\n")
+			}
+			return "", fmt.Errorf("weaviate graphql errors: %s", strings.TrimSpace(sbErr.String()))
+		}
+	}
+	data, ok := m["data"].(map[string]any)
+	if !ok {
+		return "", fmt.Errorf("Data missing from output: %s", string(body))
+	}
+	get, ok := data["Get"].(map[string]any)
+	if !ok {
+		return "", fmt.Errorf("Get missing from output: %s", string(body))
+	}
+	resultsRaw, ok := get[className]
+	if !ok {
+		return "", fmt.Errorf("Results missing for class %s", className)
+	}
+	arr, ok := resultsRaw.([]any)
+	if !ok {
+		return "", fmt.Errorf("Unexpected result type for class %s", className)
+	}
+	var path string
+	for _, item := range arr {
+		if itm, ok := item.(map[string]any); ok {
+			var p string
+			if v, ok := itm["path"]; ok {
+				if ps, ok := v.(string); ok {
+					p = ps
+				}
+			}
+			path = p
+			break
+		}
+	}
+	return path, nil
 }
 
 func readObsidianFile(path string) (string, error) {
@@ -322,100 +419,6 @@ func readObsidianFile(path string) (string, error) {
 		contentToUse = strings.TrimSuffix(sb.String(), "\n")
 	}
 	return contentToUse, nil
-}
-
-func readWeaviateJournal(prompt string) ([]string, []string, error) {
-	log.Printf("[DEBUG] Entering readWeaviateJournal")
-	endpoint := os.Getenv("WEAVIATE_URL")
-	certainty := os.Getenv("WEAVIATE_CERTAINTY")
-	className := os.Getenv("WEAVIATE_CLASS")
-	if endpoint == "" {
-		return nil, nil, fmt.Errorf("WEAVIATE_URL not set")
-	}
-	if className == "" {
-		return nil, nil, fmt.Errorf("WEAVIATE_CLASS not set")
-	}
-	endpoint = strings.TrimRight(endpoint, "/") + "/v1/graphql"
-	escapedPrompt := strings.ReplaceAll(prompt, `"`, `\"`)
-	query := fmt.Sprintf(`{ Get { %s(limit: 1, hybrid: {query: "%s", alpha: %s}) { path content } } }`, className, escapedPrompt, certainty)
-	payload := map[string]string{"query": query}
-	bs, err := json.Marshal(payload)
-	if err != nil {
-		return nil, nil, err
-	}
-	req, err := http.NewRequest("POST", endpoint, bytes.NewReader(bs))
-	if err != nil {
-		return nil, nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{Timeout: 20 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, nil, err
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, nil, err
-	}
-	if resp.StatusCode >= 400 {
-		return nil, nil, fmt.Errorf("weaviate returned status %d: %s", resp.StatusCode, string(body))
-	}
-	var parsed any
-	if err := json.Unmarshal(body, &parsed); err != nil {
-		return nil, nil, err
-	}
-	m, ok := parsed.(map[string]any)
-	if !ok {
-		return nil, nil, fmt.Errorf("invalid response format: %s", string(body))
-	}
-	if errs, ok := m["errors"]; ok {
-		if arr, ok := errs.([]any); ok && len(arr) > 0 {
-			var sbErr strings.Builder
-			for _, e := range arr {
-				b, _ := json.Marshal(e)
-				sbErr.Write(b)
-				sbErr.WriteString("\n")
-			}
-			return nil, nil, fmt.Errorf("weaviate graphql errors: %s", strings.TrimSpace(sbErr.String()))
-		}
-	}
-	data, ok := m["data"].(map[string]any)
-	if !ok {
-		return nil, nil, fmt.Errorf("Data missing from output: %s", string(body))
-	}
-	get, ok := data["Get"].(map[string]any)
-	if !ok {
-		return nil, nil, fmt.Errorf("Get missing from output: %s", string(body))
-	}
-	resultsRaw, ok := get[className]
-	if !ok {
-		return nil, nil, fmt.Errorf("Results missing for class %s", className)
-	}
-	arr, ok := resultsRaw.([]any)
-	if !ok {
-		return nil, nil, fmt.Errorf("Unexpected result type for class %s", className)
-	}
-	var paths []string
-	var contents []string
-	for _, item := range arr {
-		if itm, ok := item.(map[string]any); ok {
-			var p, c string
-			if v, ok := itm["path"]; ok {
-				if ps, ok := v.(string); ok {
-					p = ps
-				}
-			}
-			if v, ok := itm["content"]; ok {
-				if cs, ok := v.(string); ok {
-					c = cs
-				}
-			}
-			paths = append(paths, p)
-			contents = append(contents, c)
-		}
-	}
-	return paths, contents, nil
 }
 
 func (h *ChatHandler) StoreMessage(c *gin.Context) {

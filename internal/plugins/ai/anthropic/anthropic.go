@@ -3,6 +3,7 @@ package anthropic
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	neturl "net/url"
 	"os"
@@ -12,11 +13,14 @@ import (
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
+	"github.com/anthropics/anthropic-sdk-go/packages/param"
 	"github.com/danielmiessler/fabric/internal/chat"
 	"github.com/danielmiessler/fabric/internal/domain"
 	debuglog "github.com/danielmiessler/fabric/internal/log"
+	"github.com/danielmiessler/fabric/internal/mcpclient"
 	"github.com/danielmiessler/fabric/internal/plugins"
 	"github.com/danielmiessler/fabric/internal/util"
+	"github.com/mark3labs/mcp-go/mcp"
 )
 
 const defaultBaseUrl = "https://api.anthropic.com/"
@@ -309,15 +313,22 @@ func (an *Client) Send(ctx context.Context, msgs []*chat.ChatCompletionMessage, 
 		// No messages to send after normalization, return empty string and no error.
 		return
 	}
+	mcpClient, mcpTools, err := mcpclient.GetClient(os.Getenv("MCP_SERVER"))
+	if err != nil {
+		log.Printf("Failed to initialize MCP client: %v", err)
+	}
 
 	var message *anthropic.Message
 	params := an.buildMessageParams(messages, opts)
+	params.Tools = getTools(mcpTools)
 	betas := an.modelBetas[opts.Model]
 	var reqOpts []option.RequestOption
 	if len(betas) > 0 {
 		reqOpts = append(reqOpts, option.WithHeader("anthropic-beta", strings.Join(betas, ",")))
 	}
+	// first call to LLM
 	if message, err = an.client.Messages.New(ctx, params, reqOpts...); err != nil {
+		log.Printf("Error creating message: %v\n", err)
 		if len(betas) > 0 {
 			debuglog.Debug(debuglog.Basic, "Anthropic beta feature %s failed: %v\n", strings.Join(betas, ","), err)
 			if message, err = an.client.Messages.New(ctx, params); err != nil {
@@ -325,6 +336,53 @@ func (an *Client) Send(ctx context.Context, msgs []*chat.ChatCompletionMessage, 
 			}
 		} else {
 			return
+		}
+	}
+
+	// Execute second message call if tool_use blocks were found
+	contents := make([]anthropic.ContentBlockParamUnion, 0)
+	for _, block := range message.Content {
+		if block.Type == "tool_use" {
+
+			toolUseBlock := anthropic.NewToolUseBlock(block.ID, block.Input, block.Name)
+
+			messages = append(messages, anthropic.MessageParam{
+				Role:    "assistant",
+				Content: []anthropic.ContentBlockParamUnion{toolUseBlock},
+			})
+
+			result, mcpErr := mcpClient.CallTool(context.Background(), mcp.CallToolRequest{
+				Params: mcp.CallToolParams{
+					Name:      block.Name,
+					Arguments: block.Input,
+				},
+			})
+			if mcpErr != nil {
+				log.Printf("Error calling mcp server: %v\n", mcpErr)
+				return
+			}
+			resultMap := result.StructuredContent.(map[string]interface{})
+			content := resultMap["result"].(string)
+			contents = append(contents, anthropic.NewToolResultBlock(block.ID, content, false))
+		}
+	}
+	if len(contents) > 0 {
+		newMessage := anthropic.MessageParam{
+			Role:    "user",
+			Content: contents,
+		}
+		messages = append(messages, newMessage)
+		params = an.buildMessageParams(messages, opts)
+		if message, err = an.client.Messages.New(ctx, params, reqOpts...); err != nil {
+			log.Printf("Error creating message: %v\n", err)
+			if len(betas) > 0 {
+				debuglog.Debug(debuglog.Basic, "Anthropic beta feature %s failed: %v\n", strings.Join(betas, ","), err)
+				if message, err = an.client.Messages.New(ctx, params); err != nil {
+					return
+				}
+			} else {
+				return
+			}
 		}
 	}
 
@@ -366,6 +424,30 @@ func (an *Client) Send(ctx context.Context, msgs []*chat.ChatCompletionMessage, 
 	ret = resultBuilder.String()
 
 	return
+}
+
+func getTools(mcpTools []mcpclient.MCPTools) []anthropic.ToolUnionParam {
+	if mcpTools == nil {
+		return []anthropic.ToolUnionParam{}
+	}
+	toolParams := make([]anthropic.ToolParam, 0)
+	for _, mcpTool := range mcpTools {
+
+		toolParam := anthropic.ToolParam{
+			Name:        mcpTool.Name,
+			Description: param.Opt[string]{Value: mcpTool.Description},
+			InputSchema: anthropic.ToolInputSchemaParam{
+				Properties: mcpTool.Parameters,
+			},
+		}
+
+		toolParams = append(toolParams, toolParam)
+	}
+	tools := make([]anthropic.ToolUnionParam, len(toolParams))
+	for i, toolParam := range toolParams {
+		tools[i] = anthropic.ToolUnionParam{OfTool: &toolParam}
+	}
+	return tools
 }
 
 func (an *Client) toMessages(msgs []*chat.ChatCompletionMessage) (ret []anthropic.MessageParam) {

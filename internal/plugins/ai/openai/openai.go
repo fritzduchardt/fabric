@@ -2,6 +2,7 @@ package openai
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -12,7 +13,9 @@ import (
 	"github.com/danielmiessler/fabric/internal/chat"
 	"github.com/danielmiessler/fabric/internal/domain"
 	debuglog "github.com/danielmiessler/fabric/internal/log"
+	"github.com/danielmiessler/fabric/internal/mcpclient"
 	"github.com/danielmiessler/fabric/internal/plugins"
+	"github.com/mark3labs/mcp-go/mcp"
 	openai "github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 	"github.com/openai/openai-go/packages/pagination"
@@ -173,20 +176,105 @@ func (o *Client) sendResponses(ctx context.Context, msgs []*chat.ChatCompletionM
 		return "", fmt.Errorf("model '%s' does not support image generation. Supported models: %s", opts.Model, strings.Join(ImageGenerationSupportedModels, ", "))
 	}
 
+	mcpClient, tools, err := mcpclient.GetClient(os.Getenv("MCP_SERVER"))
+	if err != nil {
+		return "", err
+	}
+	toolParams := getTools(tools)
 	req := o.buildResponseParams(msgs, opts)
+	req.Tools = toolParams
 
 	var resp *responses.Response
 	if resp, err = o.ApiClient.Responses.New(ctx, req); err != nil {
 		return
 	}
 
+	// Check for function calls in the response output
+	for _, item := range resp.Output {
+		if item.Type == "function_call" {
+			toolCall := item.AsFunctionCall()
+			result, mcpErr := mcpClient.CallTool(context.Background(), mcp.CallToolRequest{
+				Params: mcp.CallToolParams{
+					Name:      toolCall.Name,
+					Arguments: json.RawMessage(toolCall.Arguments),
+				},
+			})
+			if mcpErr != nil {
+				return "", mcpErr
+			}
+
+			strResult, mcpErr := json.Marshal(result.Content)
+			if mcpErr != nil {
+				return "", mcpErr
+			}
+			// Continue conversation with function result
+			newReq := responses.ResponseNewParams{
+				Model:              req.Model,
+				PreviousResponseID: openai.String(resp.ID),
+				Input: responses.ResponseNewParamsInputUnion{
+					OfInputItemList: []responses.ResponseInputItemUnionParam{{
+						OfFunctionCallOutput: &responses.ResponseInputItemFunctionCallOutputParam{
+							CallID: toolCall.CallID,
+							Output: string(strResult),
+						},
+					}},
+				},
+			}
+			if resp, err = o.ApiClient.Responses.New(ctx, newReq); err != nil {
+				return "", err
+			}
+		}
+	}
+
 	// Extract and save images if requested
 	if err = o.extractAndSaveImages(resp, opts); err != nil {
-		return
+		return "", err
 	}
 
 	ret = o.extractText(resp)
-	return
+	return ret, nil
+}
+
+func getTools(mcpTools []mcpclient.MCPTools) []responses.ToolUnionParam {
+	if mcpTools == nil {
+		return []responses.ToolUnionParam{}
+	}
+	toolUnionParams := make([]responses.ToolUnionParam, 0)
+	for _, mcpTool := range mcpTools {
+		toolParam := responses.FunctionToolParam{
+			Name:        mcpTool.Name,
+			Description: openai.String(mcpTool.Description),
+			Parameters:  convertToOpenaiParams(mcpTool.Parameters),
+		}
+		toolUnionParams = append(toolUnionParams, responses.ToolUnionParam{
+			OfFunction: &toolParam,
+		})
+	}
+	return toolUnionParams
+}
+
+//	"properties": map[string]any{
+//	 "location": map[string]string{
+//	   "type": "string",
+//	 },
+//	},
+func convertToOpenaiParams(mcpToolsProperties map[string]any) map[string]any {
+
+	openaiProperties := map[string]any{}
+	required := []string{}
+	typeMap := map[string]string{
+		"type": "string",
+	}
+	for key, _ := range mcpToolsProperties {
+		openaiProperties[key] = typeMap
+		required = append(required, key)
+	}
+	openaiParam := map[string]any{
+		"properties": openaiProperties,
+		"type":       "object",
+		"required":   required,
+	}
+	return openaiParam
 }
 
 // supportsResponsesAPI determines if the provider supports the new Responses API
