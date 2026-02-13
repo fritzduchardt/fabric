@@ -20,7 +20,7 @@ import (
 	"github.com/danielmiessler/fabric/internal/mcpclient"
 	"github.com/danielmiessler/fabric/internal/plugins"
 	"github.com/danielmiessler/fabric/internal/util"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 const defaultBaseUrl = "https://api.anthropic.com/"
@@ -313,7 +313,7 @@ func (an *Client) Send(ctx context.Context, msgs []*chat.ChatCompletionMessage, 
 		// No messages to send after normalization, return empty string and no error.
 		return
 	}
-	mcpClient, mcpTools, err := mcpclient.GetClient(os.Getenv("MCP_SERVER"))
+	mcpSession, _, mcpTools, err := mcpclient.GetClient(os.Getenv("MCP_SERVER"))
 	if err != nil {
 		log.Printf("Failed to initialize MCP client: %v", err)
 	}
@@ -327,6 +327,7 @@ func (an *Client) Send(ctx context.Context, msgs []*chat.ChatCompletionMessage, 
 		reqOpts = append(reqOpts, option.WithHeader("anthropic-beta", strings.Join(betas, ",")))
 	}
 	// first call to LLM
+	log.Printf("First call to Anthropic")
 	if message, err = an.client.Messages.New(ctx, params, reqOpts...); err != nil {
 		log.Printf("Error creating message: %v\n", err)
 		if len(betas) > 0 {
@@ -351,19 +352,24 @@ func (an *Client) Send(ctx context.Context, msgs []*chat.ChatCompletionMessage, 
 				Content: []anthropic.ContentBlockParamUnion{toolUseBlock},
 			})
 
-			result, mcpErr := mcpClient.CallTool(context.Background(), mcp.CallToolRequest{
-				Params: mcp.CallToolParams{
-					Name:      block.Name,
-					Arguments: block.Input,
-				},
+			log.Printf("Calling tool %v with args: %v\n", block.Name, string(block.Input))
+			//result, mcpErr := mcpClient.CallTool(ctx, mcp.CallToolRequest{
+			result, mcpErr := mcpSession.CallTool(ctx, &mcp.CallToolParams{
+				Name:      block.Name,
+				Arguments: block.Input,
 			})
 			if mcpErr != nil {
 				log.Printf("Error calling mcp server: %v\n", mcpErr)
 				return
 			}
-			resultMap := result.StructuredContent.(map[string]interface{})
-			content := resultMap["result"].(string)
-			contents = append(contents, anthropic.NewToolResultBlock(block.ID, content, false))
+			if result != nil && result.StructuredContent != nil {
+				resultMap := result.StructuredContent.(map[string]interface{})
+				content := resultMap["result"].(string)
+				contents = append(contents, anthropic.NewToolResultBlock(block.ID, content, false))
+				log.Printf("Added tool results to anthropic query")
+			} else {
+				log.Printf("Failed to get tool results for Anthropic query")
+			}
 		}
 	}
 	if len(contents) > 0 {
@@ -373,6 +379,7 @@ func (an *Client) Send(ctx context.Context, msgs []*chat.ChatCompletionMessage, 
 		}
 		messages = append(messages, newMessage)
 		params = an.buildMessageParams(messages, opts)
+		fmt.Printf("Calling Anthropic again with tool results")
 		if message, err = an.client.Messages.New(ctx, params, reqOpts...); err != nil {
 			log.Printf("Error creating message: %v\n", err)
 			if len(betas) > 0 {
@@ -385,7 +392,7 @@ func (an *Client) Send(ctx context.Context, msgs []*chat.ChatCompletionMessage, 
 			}
 		}
 	}
-
+	log.Printf("Processing response")
 	var textParts []string
 	var citations []string
 	citationMap := make(map[string]bool) // To avoid duplicate citations
@@ -432,12 +439,16 @@ func getTools(mcpTools []mcpclient.MCPTools) []anthropic.ToolUnionParam {
 	}
 	toolParams := make([]anthropic.ToolParam, 0)
 	for _, mcpTool := range mcpTools {
-
+		var required []string
+		for key, _ := range mcpTool.Parameters["properties"].(map[string]any) {
+			required = append(required, key)
+		}
 		toolParam := anthropic.ToolParam{
 			Name:        mcpTool.Name,
 			Description: param.Opt[string]{Value: mcpTool.Description},
 			InputSchema: anthropic.ToolInputSchemaParam{
-				Properties: mcpTool.Parameters,
+				Required:   required,
+				Properties: mcpTool.Parameters["properties"],
 			},
 		}
 

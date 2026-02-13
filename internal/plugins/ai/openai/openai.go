@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"slices"
@@ -15,7 +16,7 @@ import (
 	debuglog "github.com/danielmiessler/fabric/internal/log"
 	"github.com/danielmiessler/fabric/internal/mcpclient"
 	"github.com/danielmiessler/fabric/internal/plugins"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	openai "github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 	"github.com/openai/openai-go/packages/pagination"
@@ -177,13 +178,17 @@ func (o *Client) sendResponses(ctx context.Context, msgs []*chat.ChatCompletionM
 	}
 	req := o.buildResponseParams(msgs, opts)
 
-	mcpClient, tools, err := mcpclient.GetClient(os.Getenv("MCP_SERVER"))
+	mcpSession, _, tools, err := mcpclient.GetClient(os.Getenv("MCP_SERVER"))
 	if err == nil {
 		toolParams := getTools(tools)
 		req.Tools = toolParams
+	} else {
+		log.Printf("Failed to initialize MCP client: %v", err)
 	}
 
 	var resp *responses.Response
+
+	log.Printf("First call to OpenAI")
 	if resp, err = o.ApiClient.Responses.New(ctx, req); err != nil {
 		return
 	}
@@ -192,20 +197,22 @@ func (o *Client) sendResponses(ctx context.Context, msgs []*chat.ChatCompletionM
 	for _, item := range resp.Output {
 		if item.Type == "function_call" {
 			toolCall := item.AsFunctionCall()
-			result, mcpErr := mcpClient.CallTool(context.Background(), mcp.CallToolRequest{
-				Params: mcp.CallToolParams{
-					Name:      toolCall.Name,
-					Arguments: json.RawMessage(toolCall.Arguments),
-				},
+			log.Printf("Calling tool %v with args: %v\n", toolCall.Name, toolCall.Arguments)
+			result, mcpErr := mcpSession.CallTool(context.Background(), &mcp.CallToolParams{
+				Name:      toolCall.Name,
+				Arguments: json.RawMessage(toolCall.Arguments),
 			})
 			if mcpErr != nil {
+				log.Printf("Error calling mcp server: %v\n", mcpErr)
 				return "", mcpErr
 			}
 
 			strResult, mcpErr := json.Marshal(result.Content)
-			if mcpErr != nil {
+			if mcpErr != nil && strResult != nil {
+				log.Printf("Failed to get tool results for OpenAI query")
 				return "", mcpErr
 			}
+			log.Printf("Added tool results to OpenAI query")
 			// Continue conversation with function result
 			newReq := responses.ResponseNewParams{
 				Model:              req.Model,
@@ -219,6 +226,7 @@ func (o *Client) sendResponses(ctx context.Context, msgs []*chat.ChatCompletionM
 					}},
 				},
 			}
+			fmt.Printf("Calling OpenAI again with tool results")
 			if resp, err = o.ApiClient.Responses.New(ctx, newReq); err != nil {
 				return "", err
 			}
@@ -243,7 +251,7 @@ func getTools(mcpTools []mcpclient.MCPTools) []responses.ToolUnionParam {
 		toolParam := responses.FunctionToolParam{
 			Name:        mcpTool.Name,
 			Description: openai.String(mcpTool.Description),
-			Parameters:  convertToOpenaiParams(mcpTool.Parameters),
+			Parameters:  convertToOpenaiParams(mcpTool.Parameters["properties"].(map[string]interface{})),
 		}
 		toolUnionParams = append(toolUnionParams, responses.ToolUnionParam{
 			OfFunction: &toolParam,

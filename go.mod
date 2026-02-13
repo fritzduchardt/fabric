@@ -14,7 +14,6 @@ require (
 	github.com/go-git/go-git/v5 v5.16.2
 	github.com/go-shiori/go-readability v0.0.0-20250217085726-9f5bf5ca7612
 	github.com/google/go-github/v66 v66.0.0
-	github.com/graphql-go/graphql v0.8.1
 	github.com/hasura/go-graphql-client v0.14.4
 	github.com/jessevdk/go-flags v1.6.1
 	github.com/joho/godotenv v1.5.1
@@ -22,6 +21,7 @@ require (
 	github.com/mark3labs/mcp-go v0.43.2
 	github.com/mattn/go-sqlite3 v1.14.28
 	github.com/mmcdole/gofeed v1.3.0
+	github.com/modelcontextprotocol/go-sdk v1.3.0
 	github.com/nicksnyder/go-i18n/v2 v2.6.0
 	github.com/ollama/ollama v0.11.7
 	github.com/openai/openai-go v1.12.0
@@ -60,6 +60,7 @@ require (
 	github.com/go-openapi/validate v0.24.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
+	github.com/google/jsonschema-go v0.4.2 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
