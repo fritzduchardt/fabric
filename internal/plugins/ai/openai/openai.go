@@ -212,7 +212,7 @@ func (o *Client) sendResponses(ctx context.Context, msgs []*chat.ChatCompletionM
         log.Printf("Failed to get tool results for OpenAI query")
         return "", mcpErr
       }
-      log.Printf("Added tool results to OpenAI query: %s", string(strResult))
+      log.Printf("Added tool results to OpenAI query.")
       // Continue conversation with function result
       newReq := responses.ResponseNewParams{
         Model:              req.Model,
