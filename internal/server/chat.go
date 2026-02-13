@@ -189,19 +189,15 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 				// first check whether prompt is determined by weaviate
 				if p.PatternName == "weaviate" {
 					path, err := readWeaviatePattern(p.UserInput)
-					if err != nil {
+					if err != nil || path == "" {
 						log.Printf("Error reading weaviate pattern: %v", err)
-						return
-					}
-					if path != "" {
+						p.PatternName = "general"
+						prompt.PatternName = p.PatternName
+					} else {
 						newPattern := filepath.Base(filepath.Dir(path))
 						p.PatternName = newPattern
 						prompt.PatternName = p.PatternName
 						log.Printf("Found new pattern with weaviate: %s", newPattern)
-					} else {
-						p.PatternName = "general"
-						prompt.PatternName = p.PatternName
-						log.Printf("Found no pattern with weaviate. Defaulting to general")
 					}
 				}
 
