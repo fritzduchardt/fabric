@@ -221,7 +221,7 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 							gender = "male"
 						}
 						filename := filepath.Join(contextDir, "general_context.md")
-						content := fmt.Sprintf("# CONTEXT\n\nCurrent model: %s\nUser name: %s\nBirth Year: %s\nGender: %s\nCurrent Date: %s\nPattern name(s): %s\nThis is not a chat\n", currentModel, personalName, birthYear, gender, now.Format("2006-01-02"), p.PatternName)
+						content := fmt.Sprintf("# CONTEXT\n\nModel: %s\nUser name: %s\nBirth Year: %s\nGender: %s\nCurrent Date: %s\nPattern: %s\n", currentModel, personalName, birthYear, gender, now.Format("2006-01-02"), p.PatternName)
 						if err := os.WriteFile(filename, []byte(content), 0666); err != nil {
 							log.Printf("Error writing context file %s: %v", filename, err)
 						}
